@@ -1,0 +1,7 @@
+.env
+etat.json
+journal.csv
+robot.log
+backtest_trades.csv
+__pycache__/
+*.pyc

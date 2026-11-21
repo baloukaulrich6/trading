@@ -1,0 +1,51 @@
+# Robot de trading Turtles + Ehlers + veto Claude
+
+Robot Python pour MetaTrader 5 (Exness et HFM), sur graphique journalier.
+
+- **Module Turtles** : suit les tendances (cassure du plus haut ou plus bas de 20 jours).
+- **Module contrarien** : achète la panique quand le marché tourne en cycles (RSI sur 2 jours).
+- **Détecteur de régime** : l'Even Better Sinewave de John Ehlers choisit le module actif.
+- **Risque** : 1 % du capital par trade, 4 positions au maximum, arrêt si le capital perd 20 %.
+- **Claude** : simple droit de veto (annonces économiques, événements). Il ne propose jamais de trade.
+
+## Installation (PC Windows)
+
+1. Installe Python 3.11 depuis python.org et coche « Add Python to PATH ».
+2. Installe MetaTrader 5 deux fois, dans `C:\MT5_Exness` et `C:\MT5_HFM`.
+3. Dans le dossier du robot : `pip install -r requirements.txt`
+4. Copie `.env.example` en `.env`, puis remplis les mots de passe et la clé API.
+5. Utilise d'abord un **compte démo**.
+
+## Commandes, dans l'ordre
+
+| Commande | Ce qu'elle fait |
+| --- | --- |
+| `python tests_robot.py` | Teste toute la logique sans MetaTrader (prix inventés) |
+| `python verifier_connexion.py` | Vérifie la connexion, les symboles et la taille possible des positions |
+| `python backtest.py` | Teste les stratégies sur l'historique réel du courtier |
+| `python robot.py` | Lance le robot : une fois par jour, vers 7 h (heure de Douala) |
+
+Pour l'automatiser : Planificateur de tâches Windows, tous les jours de mardi à samedi à 7 h.
+
+## Fichiers
+
+| Fichier | Rôle |
+| --- | --- |
+| `config.py` | Tous les réglages |
+| `indicateurs.py` | ATR, canaux de Donchian, RSI, Even Better Sinewave |
+| `strategie.py` | Règles d'entrée et de sortie |
+| `risque.py` | Taille des positions et arrêt d'urgence |
+| `courtier.py` | Connexion MT5, données et ordres |
+| `veto_claude.py` | Veto de Claude avec recherche web |
+| `robot.py` | Programme principal |
+| `backtest.py` | Test sur l'historique |
+| `verifier_connexion.py` | Diagnostic avant de lancer le robot |
+| `tests_robot.py` | Tests automatiques |
+| `PROMPT_INTEGRATION.md` | Prompt complet pour continuer le développement avec Claude |
+
+## Sécurité
+
+- `MODE=TEST` par défaut : aucun ordre n'est envoyé.
+- Sur un serveur réel (nom contenant « Real » ou « Live »), aucun ordre ne part sans `COMPTE_REEL_CONFIRME=oui`.
+- Ne partage jamais le fichier `.env`.
+- Résultats passés ≠ résultats futurs. La majorité des comptes CFD de particuliers perdent de l'argent.
