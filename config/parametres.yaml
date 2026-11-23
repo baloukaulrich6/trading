@@ -1,0 +1,14 @@
+version: champion-initial
+entree_turtles: 20
+sortie_turtles: 10
+stop_atr: 2.0
+periode_atr: 20
+periode_rsi: 2
+rsi_achat: 10
+rsi_vente: 90
+sma_longue: 200
+sma_sortie: 5
+regime: ebsw
+seuil_ebsw: 0.85
+seuil_er: 0.35
+periode_er: 20

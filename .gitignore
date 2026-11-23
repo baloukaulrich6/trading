@@ -12,3 +12,6 @@ automatique.sqlite3*
 automatique_etat.json
 automatique_etat.tmp
 rapports_automatiques/
+
+.coverage
+*.egg-info/

@@ -1,0 +1,9 @@
+risque_base: 0.01
+risque_absolu: 0.015
+risque_total: 0.04
+positions_max: 4
+exposition_max: 2
+perte_jour_max: 0.03
+reduire_apres: 2
+pause_apres: 5
+drawdown_max: 0.20
