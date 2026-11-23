@@ -16,6 +16,8 @@ Robot Python pour MetaTrader 5 (Exness et HFM), sur graphique journalier.
 4. Copie `.env.example` en `.env`, puis remplis les mots de passe et la clé API.
 5. Utilise d'abord un **compte démo**.
 
+Si la connexion échoue avec `-10005 (IPC timeout)` et réussit avec un délai plus long, ajoute `MT5_TIMEOUT_MS=1200000` à ton `.env` pour autoriser jusqu'à 20 minutes. Sans ce réglage, le délai est d'une minute.
+
 ## Commandes, dans l'ordre
 
 | Commande | Ce qu'elle fait |

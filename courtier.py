@@ -20,7 +20,7 @@ class Courtier:
     # ---------- connexion ----------
     def connecter(self) -> None:
         params = {"login": self.login, "password": self.mot_de_passe,
-                  "server": self.serveur, "timeout": 60000}
+                  "server": self.serveur, "timeout": C.MT5_TIMEOUT_MS}
         if self.chemin:
             params["path"] = self.chemin
         if not mt5.initialize(**params):

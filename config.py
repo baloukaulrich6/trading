@@ -14,6 +14,11 @@ def _oui(nom, defaut="non"):
 # ORDRES : le robot envoie les ordres (sur un compte DÉMO pendant au moins 3 mois).
 MODE = os.getenv("MODE", "TEST").strip().upper()
 
+# Délai maximal de connexion à MetaTrader 5, en millisecondes.
+MT5_TIMEOUT_MS = int(os.getenv("MT5_TIMEOUT_MS", "").strip() or "60000")
+if MT5_TIMEOUT_MS <= 0:
+    raise ValueError("MT5_TIMEOUT_MS doit être un entier positif en millisecondes.")
+
 # Marchés suivis (noms de base, le suffixe du courtier est trouvé automatiquement)
 SYMBOLES = ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD"]
 
