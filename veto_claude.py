@@ -24,18 +24,28 @@ Termine ta réponse par un objet JSON sur une seule ligne :
 {"decision": "autoriser" ou "bloquer", "raison": "phrase courte en français"}"""
 
 
-def lire_decision(texte: str) -> tuple[bool, str]:
+def lire_decision_stricte(texte: str) -> tuple[bool, str]:
     """Extrait le dernier objet JSON de la réponse. En cas de doute : bloquer."""
     objets = re.findall(r"\{[^{}]*\}", texte)
     if not objets:
-        return False, "réponse de Claude illisible : trade bloqué par prudence"
+        raise ValueError("réponse de Claude illisible")
     try:
         avis = json.loads(objets[-1])
-    except json.JSONDecodeError:
-        return False, "JSON de Claude invalide : trade bloqué par prudence"
+    except json.JSONDecodeError as erreur:
+        raise ValueError("JSON de Claude invalide") from erreur
     decision = str(avis.get("decision", "")).strip().lower()
-    raison = str(avis.get("raison", "")).strip() or "sans raison donnée"
+    raison = avis.get("raison")
+    if decision not in ("autoriser", "bloquer") or not isinstance(raison, str) or not raison.strip():
+        raise ValueError("décision ou raison manquante dans la réponse de Claude")
+    raison = raison.strip()
     return decision == "autoriser", raison
+
+
+def lire_decision(texte: str) -> tuple[bool, str]:
+    try:
+        return lire_decision_stricte(texte)
+    except ValueError as erreur:
+        return False, f"{erreur} : trade bloqué par prudence"
 
 
 def demander_veto(donnees: dict) -> tuple[bool, str]:
@@ -46,18 +56,22 @@ def demander_veto(donnees: dict) -> tuple[bool, str]:
         return False, "clé API Claude absente : aucun nouveau trade"
 
     try:
-        import anthropic
-
-        client = anthropic.Anthropic(api_key=C.ANTHROPIC_API_KEY)
-        reponse = client.messages.create(
-            model=C.CLAUDE_MODELE,
-            max_tokens=1024,
-            system=CONSIGNE,
-            tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 3}],
-            messages=[{"role": "user", "content": json.dumps(donnees, ensure_ascii=False)}],
-        )
-        texte = "".join(b.text for b in reponse.content if getattr(b, "type", "") == "text")
-        return lire_decision(texte)
+        return lire_decision(interroger_claude(donnees))
     except Exception as erreur:  # réseau, clé invalide, quota...
         log.warning("Claude injoignable : %s", erreur)
         return False, "Claude injoignable : aucun nouveau trade aujourd'hui"
+
+
+def interroger_claude(donnees: dict) -> str:
+    """Appelle le modèle et renvoie le texte brut du veto."""
+    import anthropic
+
+    client = anthropic.Anthropic(api_key=C.ANTHROPIC_API_KEY, timeout=60.0)
+    reponse = client.messages.create(
+        model=C.CLAUDE_MODELE,
+        max_tokens=1024,
+        system=CONSIGNE,
+        tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 3}],
+        messages=[{"role": "user", "content": json.dumps(donnees, ensure_ascii=False)}],
+    )
+    return "".join(b.text for b in reponse.content if getattr(b, "type", "") == "text")

@@ -112,6 +112,7 @@ def traiter_courtier(conf: dict) -> None:
                  compte.leverage)
 
         envoyer, motif = ordres_autorises(c)
+        analyse_seule = C.MODE == "TEST" and capital <= 0
         bloque, motif_arret = R.arret_urgence(c.nom, capital)
         if bloque:
             log.warning("%s : nouveaux trades bloqués (%s)", c.nom, motif_arret)
@@ -127,6 +128,16 @@ def traiter_courtier(conf: dict) -> None:
             ligne = donnees.iloc[-1]
             log.info("%s %s : clôture %s, régime %s (EBSW %.2f), RSI %.1f", c.nom, symbole,
                      ligne["close"], ligne["regime"], ligne["ebsw"], ligne["rsi"])
+
+            if analyse_seule:
+                signal = S.signal_entree(ligne)
+                if signal is None:
+                    log.info("%s %s : aucun signal d'entrée", c.nom, symbole)
+                else:
+                    log.info("%s %s : signal %s %s (%s), stop indicatif %s",
+                             c.nom, symbole, signal["sens"], signal["module"],
+                             signal["raison"], signal["stop"])
+                continue
 
             gerer_sorties(c, symbole, ligne, envoyer, motif)
 

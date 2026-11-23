@@ -5,3 +5,5 @@ robot.log
 backtest_trades.csv
 __pycache__/
 *.pyc
+
+tableau_analyse.html

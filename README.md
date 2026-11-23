@@ -20,12 +20,18 @@ Si la connexion échoue avec `-10005 (IPC timeout)` et réussit avec un délai p
 
 ## Commandes, dans l'ordre
 
+Sur Windows, laisse MetaTrader 5 ouvert et double-clique sur `Ouvrir_Trading.vbs` pour afficher le tableau sans console. L'interface lit les bougies D1 clôturées à l'ouverture, puis chaque minute. Tu peux saisir jusqu'à six capitaux fictifs séparés par des espaces et cliquer sur **Actualiser**. **Tester MT5 et Claude** lance le diagnostic à la demande, avec la clé API de ton `.env`. L'interface fonctionne en lecture seule.
+
 | Commande | Ce qu'elle fait |
 | --- | --- |
 | `python tests_robot.py` | Teste toute la logique sans MetaTrader (prix inventés) |
 | `python verifier_connexion.py` | Vérifie la connexion, les symboles et la taille possible des positions |
+| `python tester_api.py` | Vérifie la lecture d'une bougie MT5 et la réponse du modèle Claude sur un exemple fictif à volume nul |
 | `python backtest.py` | Teste les stratégies sur l'historique réel du courtier |
+| `python tableau_analyse.py --capital 25 50 100 200` | Génère le tableau HTML des signaux D1 et des tailles de position pour quatre capitaux fictifs |
 | `python robot.py` | Lance le robot : une fois par jour, vers 7 h (heure de Douala) |
+
+Ouvre `tableau_analyse.html` dans ton navigateur après l'exécution. Le compte peut rester vide. Les capitaux sont exprimés en USD, même sur un compte Cent en USC. Chaque nouvelle exécution actualise le rapport à partir des dernières bougies journalières clôturées. Aucun ordre n'est envoyé.
 
 Pour l'automatiser : Planificateur de tâches Windows, tous les jours de mardi à samedi à 7 h.
 
