@@ -62,16 +62,29 @@ def demander_veto(donnees: dict) -> tuple[bool, str]:
         return False, "Claude injoignable : aucun nouveau trade aujourd'hui"
 
 
-def interroger_claude(donnees: dict) -> str:
+def interroger_claude(donnees: dict, *, diagnostic: bool = False) -> str:
     """Appelle le modèle et renvoie le texte brut du veto."""
     import anthropic
 
     client = anthropic.Anthropic(api_key=C.ANTHROPIC_API_KEY, timeout=60.0)
+    options = {
+        "system": CONSIGNE,
+        "tools": [{"type": "web_search_20250305", "name": "web_search", "max_uses": 3}],
+    }
+    if diagnostic:
+        options = {"system": (
+            "Contrôle les données fictives. Un volume nul ou négatif doit être bloqué. "
+            'Réponds uniquement par un objet JSON avec "decision" ("autoriser" ou "bloquer") '
+            'et "raison" (une courte phrase en français).'
+        )}
     reponse = client.messages.create(
         model=C.CLAUDE_MODELE,
         max_tokens=1024,
-        system=CONSIGNE,
-        tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 3}],
         messages=[{"role": "user", "content": json.dumps(donnees, ensure_ascii=False)}],
+        **options,
     )
-    return "".join(b.text for b in reponse.content if getattr(b, "type", "") == "text")
+    texte = "".join(b.text for b in reponse.content if b.type == "text")
+    if diagnostic and (not texte.strip() or reponse.stop_reason != "end_turn"):
+        blocs = ", ".join(b.type for b in reponse.content) or "aucun"
+        raise ValueError(f"réponse texte incomplète (arrêt : {reponse.stop_reason}, blocs : {blocs})")
+    return texte

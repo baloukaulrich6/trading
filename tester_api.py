@@ -37,10 +37,10 @@ def tester_claude() -> str:
         "stop": 1.09,
         "volume": 0,
     }
-    autorise, raison = lire_decision_stricte(interroger_claude(exemple))
+    autorise, raison = lire_decision_stricte(interroger_claude(exemple, diagnostic=True))
     if autorise:
         raise ValueError("Le modèle a autorisé un volume nul. Le test attend un blocage.")
-    return f"Claude OK · {C.CLAUDE_MODELE} · blocage attendu : {raison}"
+    return f"Claude OK · {C.CLAUDE_MODELE} · test sans recherche web · blocage attendu : {raison}"
 
 
 def diagnostic() -> tuple[int, list[str]]:
