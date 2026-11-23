@@ -62,7 +62,12 @@ class Courtier:
 
     def trouver_symbole(self, base: str):
         """Trouve le vrai nom du symbole chez le courtier (EURUSD, EURUSDm, EURUSDc...)."""
-        if mt5.symbol_info(base) is not None:
+        compte = self.infos_compte() if self.nom == "HFM" else None
+        if compte is not None and compte.currency.upper() == "USC":
+            nom = base + "c"
+            if mt5.symbol_info(nom) is None:
+                return None
+        elif mt5.symbol_info(base) is not None:
             nom = base
         else:
             candidats = [s.name for s in (mt5.symbols_get(group=f"{base}*") or [])
@@ -70,8 +75,7 @@ class Courtier:
             if not candidats:
                 return None
             nom = min(candidats, key=len)
-        mt5.symbol_select(nom, True)
-        return nom
+        return nom if mt5.symbol_select(nom, True) else None
 
     def bougies(self, symbole: str, nombre: int = 400) -> pd.DataFrame:
         """Bougies journalières CLÔTURÉES (la bougie en cours est exclue)."""

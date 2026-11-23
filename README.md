@@ -39,7 +39,11 @@ Pour l'automatiser : Planificateur de tâches Windows, tous les jours de mardi �
 
 Dans MT5, ouvre **Fichier → Ouvrir le dossier des données**, copie `SuiviRobot.mq5` dans `MQL5\Indicators`, puis ouvre ce fichier dans MetaEditor et compile-le avec **F7**. Depuis **Navigateur → Indicateurs** dans MT5, ajoute **SuiviRobot** au graphique du symbole. Lance `robot.py` pour publier le dernier état. Le graphique affiche les décisions et les résultats d'envoi, et l'onglet **Trade** affiche les positions exécutées par MT5.
 
+Sur un compte HFM en USC, ouvre les graphiques des symboles Cent, par exemple `XAUUSDc` pour l'or. L'indicateur affiche les tickets ouverts du robot, leur résultat latent et le résultat net des transactions marquées par le robot sur ce symbole depuis 30 jours. L'onglet **Historique** de MT5 reste la référence pour le détail complet du compte.
+
 Le robot effectue un passage par lancement sur les dernières bougies D1 clôturées. En `MODE=ORDRES`, vérifie dans **Outils → Options → Expert Advisors** que le trading algorithmique est autorisé, y compris via l'API Python. Le passage sur un compte non-démo exige également `COMPTE_REEL_CONFIRME=oui`. Le solde, le volume minimal, la marge et les règles du courtier peuvent empêcher l'exécution d'un ordre.
+
+Une nouvelle entrée sur un compte réel requiert aussi `CLAUDE_ACTIF=oui` et un avis favorable de Claude après le contrôle de risque. Les clôtures du robot suivent leurs propres règles et restent indépendantes du veto.
 
 ## Fichiers
 

@@ -94,7 +94,12 @@ def chercher_entree(c: Courtier, symbole: str, ligne, capital: float, envoyer: b
         "regime": ligne["regime"], "ebsw": round(float(ligne["ebsw"]), 3),
         "rsi_2j": round(float(ligne["rsi"]), 1),
     }
-    autorise, raison = demander_veto(donnees_veto)
+    if envoyer and c.est_compte_reel() and not C.CLAUDE_ACTIF:
+        autorise, raison = False, "Claude doit être activé pour une entrée sur compte réel"
+    else:
+        if C.CLAUDE_ACTIF:
+            publier(c.login, symbole, f"Signal {sens} · Analyse Claude en cours")
+        autorise, raison = demander_veto(donnees_veto)
     if not autorise:
         publier(c.login, symbole, f"Claude bloque · {raison}")
         log.info("%s %s : veto de Claude (%s)", c.nom, symbole, raison)
@@ -102,7 +107,8 @@ def chercher_entree(c: Courtier, symbole: str, ligne, capital: float, envoyer: b
         return False
 
     ok, detail = c.ouvrir(symbole, sens, volume, stop, module) if envoyer else (False, motif)
-    publier(c.login, symbole, f"Signal {sens} · {raison} · {detail}")
+    decision = f"Claude autorise : {raison}" if C.CLAUDE_ACTIF else raison
+    publier(c.login, symbole, f"Signal {sens} · {decision} · {detail}")
     log.info("%s %s : entrée %s %s %.2f lot -> %s", c.nom, symbole, module, sens, volume, detail)
     journaliser(**base_journal, volume=volume, action="entrée",
                 resultat="ok" if ok else "non envoyé", raison=f"{signal['raison']} | {detail}")
