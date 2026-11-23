@@ -269,6 +269,13 @@ main{
 .capital .moins{color:#FF8A8D!important}
 .details-compte{margin-top:12px; font-size:.85rem; color:#8F98CF}
 
+/* Choix du compte */
+.choix-mode{display:flex;flex-wrap:wrap;gap:.5rem}
+.choix-mode button{font:inherit;font-weight:700;color:#18204c;background:#eef1f8;border:1px solid #a6afd0;border-radius:.65rem;padding:.55rem .85rem;cursor:pointer}
+.choix-mode button[aria-pressed="true"]{color:#fff;background:#303b80;border-color:#303b80}
+.choix-mode button:focus-visible{outline:2px solid #384cba;outline-offset:3px}
+.choix-mode button:disabled{opacity:.65;cursor:wait}
+
 /* positions */
 #positions{overflow-x:auto}
 table{width:100%; border-collapse:collapse; font-size:.95rem}
@@ -450,6 +457,16 @@ body.mode-demo .demo{display:block}
 
 <main>
   <div class="colonne">
+    <section class="panneau" id="pilotage" aria-labelledby="t-pilotage" hidden>
+      <h2 id="t-pilotage">Choisir le mode de Nkap</h2>
+      <div class="choix-mode">
+        <button type="button" data-mode="TEST">Observation</button>
+        <button type="button" data-mode="DEMO">Démo</button>
+        <button type="button" data-mode="REEL">Réel</button>
+      </div>
+      <p id="etat-pilotage"></p>
+      <p id="message-pilotage" role="status"></p>
+    </section>
     <section class="panneau capital" aria-labelledby="t-capital">
       <h2 id="t-capital">Ton capital</h2>
       <div class="comptes" id="comptes"></div>
@@ -640,6 +657,53 @@ body.mode-demo .demo{display:block}
 
   // ---------------------------------------------------------------- état local
   let dernierEtat = null;
+  let pilotage = null;
+  const boutonsMode = [...document.querySelectorAll(".choix-mode button")];
+
+  function afficherPilotage(etat) {
+    $("pilotage").hidden = false;
+    $("etat-pilotage").textContent =
+      `Mode appliqué : ${etat.applique === "TEST" ? "observation" : etat.applique}.` +
+      (etat.demande !== etat.applique ? " Changement en attente du prochain passage." : "");
+    boutonsMode.forEach((bouton) => {
+      bouton.setAttribute("aria-pressed", String(bouton.dataset.mode === etat.applique));
+    });
+  }
+
+  async function lirePilotage() {
+    try {
+      const r = await fetch("/api/pilotage", { cache: "no-store" });
+      if (!r.ok) {
+        $("pilotage").hidden = true;
+        return;
+      }
+      pilotage = await r.json();
+      afficherPilotage(pilotage);
+    } catch {
+      $("pilotage").hidden = true;
+    }
+  }
+
+  for (const bouton of boutonsMode) {
+    bouton.addEventListener("click", async () => {
+      if (!pilotage) return;
+      boutonsMode.forEach((b) => { b.disabled = true; });
+      try {
+        const r = await fetch("/api/pilotage", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Nkap-Token": pilotage.jeton },
+          body: JSON.stringify({ mode: bouton.dataset.mode })
+        });
+        const etat = await r.json();
+        $("message-pilotage").textContent = etat.message;
+        await lirePilotage();
+      } catch {
+        $("message-pilotage").textContent = "Le service local ne répond pas.";
+      } finally {
+        boutonsMode.forEach((b) => { b.disabled = false; });
+      }
+    });
+  }
   async function rafraichir() {
     try {
       const r = await fetch("/api/etat", { cache: "no-store" });
@@ -663,7 +727,9 @@ body.mode-demo .demo{display:block}
   }
 
   rafraichir();
+  lirePilotage();
   setInterval(rafraichir, 4000);
+  setInterval(lirePilotage, 4000);
 })();
 </script>
 </body>

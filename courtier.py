@@ -18,6 +18,7 @@ class Courtier:
         self.mot_de_passe = conf["mot_de_passe"]
         self.serveur = conf["serveur"]
         self.chemin = conf["chemin"]
+        self.demo_uniquement = conf.get("demo_uniquement", False)
 
     # ---------- connexion ----------
     def connecter(self) -> None:
@@ -27,6 +28,13 @@ class Courtier:
             params["path"] = self.chemin
         if not mt5.initialize(**params):
             raise ConnectionError(f"{self.nom} : connexion impossible {mt5.last_error()}")
+        if self.demo_uniquement:
+            compte = self.infos_compte()
+            if (compte is None or compte.login != self.login
+                    or compte.server.casefold() != self.serveur.casefold()
+                    or compte.trade_mode != mt5.ACCOUNT_TRADE_MODE_DEMO):
+                self.deconnecter()
+                raise ConnectionError("MT5 n'a pas confirmé le compte démo configuré.")
         log.info("%s connecté (serveur %s)", self.nom, self.serveur)
 
     def deconnecter(self) -> None:
@@ -44,6 +52,8 @@ class Courtier:
             raise RuntimeError("Compte MT5 actif différent du compte configuré.")
         if C.MODE != "ORDRES":
             raise RuntimeError("MODE=ORDRES est requis pour envoyer un ordre.")
+        if self.demo_uniquement and compte.trade_mode != mt5.ACCOUNT_TRADE_MODE_DEMO:
+            raise RuntimeError("Le profil démo ne peut envoyer d'ordre sur un compte réel.")
         if (compte.trade_mode != mt5.ACCOUNT_TRADE_MODE_DEMO
                 and os.getenv("COMPTE_REEL_CONFIRME", "").strip().lower() != "oui"):
             raise RuntimeError("La confirmation du compte réel est requise.")

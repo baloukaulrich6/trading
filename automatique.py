@@ -14,6 +14,7 @@ import MetaTrader5 as mt5
 
 import config as C
 import notifications
+from pilotage_local import Pilotage
 import rapport
 import robot
 import tableau_de_bord
@@ -207,7 +208,7 @@ class Planificateur:
                 for r in self.rapports
             },
             "evenements": activite(),
-            "fantome": self.observations_fantomes if self.fantome is not None else None,
+            "fantome": self.observations_fantomes if self.fantome is not None and C.MODE == "TEST" else None,
         }, ensure_ascii=False)
         if self.fantome is not None:
             self.fantome.exporter(BASE / "observations_nkap" / "rapport.csv")
@@ -223,13 +224,24 @@ class Planificateur:
 def main():
     fenetre_entree(datetime.now(timezone.utc))
     robot.configurer_log()
+    pilotage = None
+    if os.getenv("NKAP_CHOIX_MODE", "non").strip().lower() == "oui":
+        pilotage = Pilotage()
+        C.MODE = "TEST"
+    tableau_de_bord.PILOTAGE = pilotage
+    planificateur = Planificateur()
     port = int(os.getenv("PORT_INTERFACE", "8765"))
     if not tableau_de_bord.demarrer(port):
         logging.getLogger("robot").error("Port local %s occupé. Nkap ne démarre pas.", port)
         raise SystemExit(1)
-    planificateur = Planificateur()
-    actifs = [conf for conf in C.COURTIERS if conf["actif"]]
+    configurations = [conf for conf in C.COURTIERS if conf["actif"]]
     while True:
+        actifs = configurations
+        if pilotage is not None:
+            mode = pilotage.appliquer()
+            C.MODE = "ORDRES" if mode == "DEMO" else "TEST"
+            if mode == "DEMO" and pilotage.demo is not None:
+                actifs = [pilotage.demo]
         planificateur.rapports.clear()
         planificateur.observations_fantomes.clear()
         erreurs = []
@@ -244,7 +256,10 @@ def main():
             planificateur.publier(" | ".join(erreurs) or statut)
         except OSError:
             logging.getLogger("robot").exception("Publication du rapport impossible")
-        sleep(INTERVALLE)
+        if pilotage is None:
+            sleep(INTERVALLE)
+        else:
+            pilotage.reveil.wait(INTERVALLE)
 
 
 if __name__ == "__main__":

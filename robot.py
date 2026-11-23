@@ -140,7 +140,8 @@ def traiter_courtier(conf: dict, planificateur=None) -> None:
 
         envoyer, motif = ordres_autorises(c)
         analyse_seule = C.MODE == "TEST" and capital <= 0
-        bloque, motif_arret = R.arret_urgence(c.nom, capital)
+        cle_risque = f"{c.nom}-DEMO:{c.login}" if c.demo_uniquement else c.nom
+        bloque, motif_arret = R.arret_urgence(cle_risque, capital)
         if bloque:
             log.warning("%s : nouveaux trades bloqués (%s)", c.nom, motif_arret)
         nb_positions = len(c.positions())
@@ -152,7 +153,7 @@ def traiter_courtier(conf: dict, planificateur=None) -> None:
                 continue
 
             if planificateur is not None:
-                if planificateur.fantome is not None:
+                if planificateur.fantome is not None and C.MODE == "TEST":
                     planificateur.observer(c, base, c.bougies(symbole, 400))
                     continue
                 bougie = c.bougies(symbole, 1).index[-1]
