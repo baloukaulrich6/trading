@@ -15,6 +15,7 @@ import MetaTrader5 as mt5
 import config as C
 import notifications
 from horaires_nkap import fenetre_entree, horaires, prochain_reveil
+from objectif_hfm import Objectif, SuiviObjectif
 from pilotage_local import Pilotage
 import rapport
 import robot
@@ -55,6 +56,8 @@ class Planificateur:
         self.rapports = []
         self.observations = {}
         self.marches = {}
+        objectif = Objectif.configurer()
+        self.suivi_objectif = SuiviObjectif(BASE / "automatique.sqlite3", objectif) if objectif else None
         self.demarrage_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
         self.observations_fantomes = []
         self.fantome = None
@@ -87,6 +90,11 @@ class Planificateur:
 
     def entrees_permises(self):
         return fenetre_entree(datetime.now(timezone.utc))
+
+    def objectif_compte(self, courtier, compte):
+        if self.suivi_objectif is None or courtier.nom != "HFM" or not courtier.est_compte_reel():
+            return None
+        return self.suivi_objectif.verifier(courtier, compte)
 
     def noter_marche(self, courtier, base, symbole, ligne, *, fantome=False):
         signal = robot.S.signal_entree(ligne) if ligne is not None else None
@@ -141,6 +149,7 @@ class Planificateur:
             "transactions": nombre,
             "resultat_semaine": semaine,
             "transactions_semaine": nombre_semaine,
+            "objectif": self.objectif_compte(courtier, compte),
             "marches": [
                 self.marches.get((courtier.nom, courtier.login, base),
                                  {"courtier": courtier.nom, "marche": base, "statut": "Analyse en attente"})

@@ -121,6 +121,14 @@ def chercher_entree(c: Courtier, symbole: str, ligne, capital: float, envoyer: b
         journaliser(**base_journal, volume=volume, action="veto", resultat="bloqué", raison=raison)
         return False
 
+    if envoyer and planificateur is not None:
+        objectif = planificateur.objectif_compte(c, c.infos_compte())
+        if objectif and objectif["bloque"]:
+            publier(c.login, symbole, objectif["motif"])
+            journaliser(**base_journal, volume=volume, action="objectif",
+                        resultat="non envoyé", raison=objectif["motif"])
+            return False
+
     ok, detail = c.ouvrir(symbole, sens, volume, stop, module) if envoyer else (False, motif)
     decision = f"Claude autorise : {raison}" if C.CLAUDE_ACTIF else raison
     publier(c.login, symbole, f"Signal {sens} · {decision} · {detail}")
@@ -145,6 +153,9 @@ def traiter_courtier(conf: dict, planificateur=None) -> None:
         bloque, motif_arret = R.arret_urgence(cle_risque, capital)
         if bloque:
             log.warning("%s : nouveaux trades bloqués (%s)", c.nom, motif_arret)
+        objectif = planificateur.objectif_compte(c, compte) if planificateur is not None else None
+        if objectif and objectif["bloque"]:
+            log.info("%s : %s", c.nom, objectif["motif"])
         nb_positions = len(c.positions())
 
         for base in marches(c.nom):
@@ -197,6 +208,9 @@ def traiter_courtier(conf: dict, planificateur=None) -> None:
                 continue
             if bloque or nb_positions >= C.MAX_POSITIONS:
                 publier(c.login, symbole, motif_arret if bloque else "Limite de positions atteinte")
+                continue
+            if objectif and objectif["bloque"]:
+                publier(c.login, symbole, objectif["motif"])
                 continue
             if planificateur is not None and not planificateur.entrees_permises():
                 publier(c.login, symbole, "En attente de la fenêtre d'entrée (heure de Douala)")

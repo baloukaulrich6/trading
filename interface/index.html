@@ -607,6 +607,9 @@ body.mode-demo .demo{display:block}
         </div>
         <div class="details-compte">${c.connecte ? `Levier 1:${echap(c.levier ?? "?")}, serveur ${echap(c.serveur || "")}` : "Injoignable : vérifie que MT5 est ouvert et connecté."}</div>
         ${Number.isFinite(etat.risque_pct) ? `<div class="details-compte">Risque chargé : ${nombre.format(etat.risque_pct)} % · Budget au stop : ${nombre.format(c.capital * etat.risque_pct / 100)} ${echap(c.devise)}</div>` : ""}
+        ${c.objectif ? `<div class="details-compte">Objectif : ${nombre.format(c.objectif.cible_usd)} USD · Jusqu’au ${echap(c.objectif.date_fin)} (Douala)<br>
+          Solde : ${c.objectif.solde_usd == null ? "indisponible" : nombre.format(c.objectif.solde_usd) + " USD"}
+          ${c.objectif.motif ? " · " + echap(c.objectif.motif) : ""}</div>` : ""}
       </div>`;
     }).join("") : `<div class="equivalent">Aucun compte connecté pour l'instant.</div>`;
 
