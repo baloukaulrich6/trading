@@ -6,7 +6,7 @@ import os
 import sqlite3
 from collections import deque
 from contextlib import closing
-from datetime import datetime, time, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from time import sleep
 
@@ -14,6 +14,7 @@ import MetaTrader5 as mt5
 
 import config as C
 import notifications
+from horaires_nkap import fenetre_entree, horaires, prochain_reveil
 from pilotage_local import Pilotage
 import rapport
 import robot
@@ -23,24 +24,6 @@ from univers_marches import marches
 BASE = Path(__file__).resolve().parent
 ETAT = BASE / "automatique_etat.json"
 INTERVALLE = 60
-
-
-def fenetre_entree(maintenant):
-    debut = time.fromisoformat(os.getenv("HEURE_EXECUTION", "09:15"))
-    fin = time.fromisoformat(os.getenv("HEURE_LIMITE", "21:00"))
-    if debut >= fin:
-        raise ValueError("HEURE_EXECUTION doit précéder HEURE_LIMITE.")
-    local = maintenant.astimezone(rapport.DOUALA)
-    return local.weekday() < 5 and debut <= local.time() < fin
-
-
-def prochain_reveil(maintenant):
-    local = maintenant.astimezone(rapport.DOUALA)
-    debut = time.fromisoformat(os.getenv("HEURE_EXECUTION", "09:15"))
-    reveil = datetime.combine(local.date(), debut, rapport.DOUALA)
-    while reveil <= local or reveil.weekday() >= 5:
-        reveil += timedelta(days=1)
-    return reveil.isoformat()
 
 
 def activite():
@@ -211,14 +194,15 @@ class Planificateur:
         temporaire = ETAT.with_suffix(".tmp")
         temporaire.write_text(json.dumps(etat, ensure_ascii=False), encoding="utf-8")
         temporaire.replace(ETAT)
+        heure_entree, heure_limite = horaires()
         tableau_de_bord.INSTANTANE = json.dumps({
             "nom": os.getenv("NOM_MASCOTTE", "Nkap"),
             "mode": C.MODE, "veto_claude": C.CLAUDE_ACTIF, "maj": etat["heure"],
             "message": statut, "humeur": "veille" if self.rapports else "erreur",
             "entrees_ouvertes": self.entrees_permises(),
             "risque_pct": C.RISQUE_PAR_TRADE * 100,
-            "heure_entree": os.getenv("HEURE_EXECUTION", "09:15"),
-            "heure_limite": os.getenv("HEURE_LIMITE", "21:00"),
+            "heure_entree": heure_entree,
+            "heure_limite": "minuit" if heure_limite == "00:00" else heure_limite,
             "prochain_reveil": prochain_reveil(datetime.now(timezone.utc)),
             "compte_reel": any(r["reel"] for r in self.rapports),
             "ordres_autorises": any(r["ordres_autorises"] for r in self.rapports),
