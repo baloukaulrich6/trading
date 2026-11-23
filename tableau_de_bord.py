@@ -15,10 +15,6 @@ from pilotage_local import Pilotage
 log = logging.getLogger("robot")
 
 PAGE = Path(__file__).resolve().parent / "interface" / "index.html"
-RESSOURCES = {
-    "/terminal.css": ("terminal.css", "text/css; charset=utf-8"),
-    "/terminal.js": ("terminal.js", "text/javascript; charset=utf-8"),
-}
 INSTANTANE = "{}"   # État public publié par la tâche.
 PILOTAGE: Pilotage | None = None
 
@@ -53,12 +49,6 @@ class _Gestionnaire(BaseHTTPRequestHandler):
                 self._repondre(200, PAGE.read_bytes(), "text/html; charset=utf-8")
             except OSError:
                 self._repondre(500, "interface/index.html introuvable".encode(), "text/plain; charset=utf-8")
-        elif self.path in RESSOURCES:
-            fichier, mime = RESSOURCES[self.path]
-            try:
-                self._repondre(200, PAGE.with_name(fichier).read_bytes(), mime)
-            except OSError:
-                self._repondre(404, b"", mime)
         else:
             self._repondre(404, b"", "text/plain")
 
