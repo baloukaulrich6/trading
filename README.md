@@ -35,6 +35,12 @@ Ouvre `tableau_analyse.html` dans ton navigateur après l'exécution. Le compte 
 
 Pour l'automatiser : Planificateur de tâches Windows, tous les jours de mardi à samedi à 7 h.
 
+### Afficher les décisions dans MetaTrader 5
+
+Dans MT5, ouvre **Fichier → Ouvrir le dossier des données**, copie `SuiviRobot.mq5` dans `MQL5\Indicators`, puis ouvre ce fichier dans MetaEditor et compile-le avec **F7**. Depuis **Navigateur → Indicateurs** dans MT5, ajoute **SuiviRobot** au graphique du symbole. Lance `robot.py` pour publier le dernier état. Le graphique affiche les décisions et les résultats d'envoi, et l'onglet **Trade** affiche les positions exécutées par MT5.
+
+Le robot effectue un passage par lancement sur les dernières bougies D1 clôturées. En `MODE=ORDRES`, vérifie dans **Outils → Options → Expert Advisors** que le trading algorithmique est autorisé, y compris via l'API Python. Le passage sur un compte non-démo exige également `COMPTE_REEL_CONFIRME=oui`. Le solde, le volume minimal, la marge et les règles du courtier peuvent empêcher l'exécution d'un ordre.
+
 ## Fichiers
 
 | Fichier | Rôle |

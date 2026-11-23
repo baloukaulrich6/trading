@@ -42,11 +42,24 @@ SYMBOLES_FAUX = {"EURUSDm": (1.1, 0.006, 5, 0.00001, 1.0, 0.00001),
 DONNEES = {nom: _serie(4000, v[0], v[1]) for nom, v in SYMBOLES_FAUX.items()}
 faux.CAPITAL = 10000.0
 
-faux.initialize = lambda **kw: True
+faux.ACCOUNT_TRADE_MODE_DEMO = 0
+faux.TRADE_RETCODE_DONE_PARTIAL = 10010
+faux.terminal_info = lambda: None
+faux.COMPTE = {}
+
+
+def _initialiser(**params):
+    faux.COMPTE.update(params)
+    return True
+
+
+faux.initialize = _initialiser
 faux.shutdown = lambda: None
 faux.last_error = lambda: (0, "ok")
 faux.account_info = lambda: types.SimpleNamespace(login=1, equity=faux.CAPITAL, currency="USC",
-                                                  leverage=100)
+                                                  leverage=100,
+                                                  server=faux.COMPTE.get("server", ""),
+                                                  trade_mode=2 if "Real" in faux.COMPTE.get("server", "") else 0)
 
 
 def _info(nom):

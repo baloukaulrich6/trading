@@ -1,5 +1,6 @@
 """Connexion à un terminal MetaTrader 5 (Exness ou HFM) : données, positions et ordres."""
 import logging
+import os
 
 import MetaTrader5 as mt5
 import pandas as pd
@@ -31,8 +32,26 @@ class Courtier:
         mt5.shutdown()
 
     def est_compte_reel(self) -> bool:
-        nom = self.serveur.lower()
-        return "real" in nom or "live" in nom
+        compte = self.infos_compte()
+        return (compte is None or getattr(compte, "trade_mode", None)
+                != mt5.ACCOUNT_TRADE_MODE_DEMO)
+
+    def verifier_envoi(self) -> None:
+        compte = self.infos_compte()
+        if (compte is None or not self.login or compte.login != self.login
+                or not self.serveur or compte.server.casefold() != self.serveur.casefold()):
+            raise RuntimeError("Compte MT5 actif différent du compte configuré.")
+        if C.MODE != "ORDRES":
+            raise RuntimeError("MODE=ORDRES est requis pour envoyer un ordre.")
+        if (compte.trade_mode != mt5.ACCOUNT_TRADE_MODE_DEMO
+                and os.getenv("COMPTE_REEL_CONFIRME", "").strip().lower() != "oui"):
+            raise RuntimeError("La confirmation du compte réel est requise.")
+
+    def positions_symbole(self, symbole: str) -> list:
+        positions = mt5.positions_get(symbol=symbole)
+        if positions is None:
+            raise RuntimeError(f"Positions MT5 indisponibles pour {symbole} : {mt5.last_error()}")
+        return list(positions)
 
     # ---------- informations ----------
     def infos_compte(self):
@@ -68,8 +87,10 @@ class Courtier:
         return tick.ask if sens == "achat" else tick.bid
 
     def positions(self, symbole: str = None) -> list:
-        brutes = mt5.positions_get(symbol=symbole) if symbole else mt5.positions_get()
-        return [p for p in (brutes or []) if p.magic == C.MAGIC]
+        brutes = self.positions_symbole(symbole) if symbole else mt5.positions_get()
+        if brutes is None:
+            raise RuntimeError(f"Positions MT5 indisponibles : {mt5.last_error()}")
+        return [p for p in brutes if p.magic == C.MAGIC]
 
     # ---------- ordres ----------
     @staticmethod
@@ -82,6 +103,9 @@ class Courtier:
         return mt5.ORDER_FILLING_RETURN
 
     def ouvrir(self, symbole: str, sens: str, volume: float, stop: float, module: str):
+        self.verifier_envoi()
+        if self.positions_symbole(symbole):
+            return False, "une position existe déjà sur ce symbole"
         info = mt5.symbol_info(symbole)
         demande = {
             "action": mt5.TRADE_ACTION_DEAL,
@@ -99,11 +123,18 @@ class Courtier:
         resultat = mt5.order_send(demande)
         if resultat is None:
             return False, f"order_send a échoué {mt5.last_error()}"
+        if resultat.retcode == mt5.TRADE_RETCODE_DONE_PARTIAL:
+            return True, f"ordre {resultat.order} partiellement exécuté"
         if resultat.retcode != mt5.TRADE_RETCODE_DONE:
             return False, f"refusé (code {resultat.retcode} : {resultat.comment})"
         return True, f"ordre {resultat.order} exécuté à {resultat.price}"
 
     def fermer(self, position):
+        self.verifier_envoi()
+        position = next((p for p in self.positions(position.symbol)
+                         if p.ticket == position.ticket), None)
+        if position is None:
+            return False, "ticket du robot introuvable"
         info = mt5.symbol_info(position.symbol)
         vente = position.type == mt5.POSITION_TYPE_BUY
         demande = {

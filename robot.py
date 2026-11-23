@@ -13,6 +13,7 @@ import config as C
 import risque as R
 import strategie as S
 from courtier import Courtier
+from suivi_mt5 import publier
 from veto_claude import demander_veto
 
 log = logging.getLogger("robot")
@@ -49,7 +50,8 @@ def ordres_autorises(c: Courtier) -> tuple[bool, str]:
     return True, "ok"
 
 
-def gerer_sorties(c: Courtier, symbole: str, ligne, envoyer: bool, motif: str) -> None:
+def gerer_sorties(c: Courtier, symbole: str, ligne, envoyer: bool, motif: str) -> list[str]:
+    sorties = []
     for p in c.positions(symbole):
         sens = "achat" if p.type == 0 else "vente"
         module = p.comment[:3] if p.comment[:3] in (S.TURTLES, S.CONTRARIEN) else S.TURTLES
@@ -57,9 +59,11 @@ def gerer_sorties(c: Courtier, symbole: str, ligne, envoyer: bool, motif: str) -
             continue
         ok, detail = c.fermer(p) if envoyer else (False, motif)
         log.info("%s %s : sortie %s %s -> %s", c.nom, symbole, module, sens, detail)
+        sorties.append(detail)
         journaliser(courtier=c.nom, symbole=symbole, action="sortie", sens=sens, module=module,
                     volume=p.volume, prix=ligne["close"], resultat="ok" if ok else "non envoyé",
                     raison=detail)
+    return sorties
 
 
 def chercher_entree(c: Courtier, symbole: str, ligne, capital: float, envoyer: bool,
@@ -78,6 +82,7 @@ def chercher_entree(c: Courtier, symbole: str, ligne, capital: float, envoyer: b
     base_journal = dict(courtier=c.nom, symbole=symbole, sens=sens, module=module,
                         prix=round(prix, info.digits), stop=round(stop, info.digits))
     if volume == 0:
+        publier(c.login, symbole, f"Signal {sens} · {motif_taille}")
         log.info("%s %s : signal %s ignoré (%s)", c.nom, symbole, module, motif_taille)
         journaliser(**base_journal, action="refus taille", resultat="ignoré", raison=motif_taille)
         return False
@@ -91,11 +96,13 @@ def chercher_entree(c: Courtier, symbole: str, ligne, capital: float, envoyer: b
     }
     autorise, raison = demander_veto(donnees_veto)
     if not autorise:
+        publier(c.login, symbole, f"Claude bloque · {raison}")
         log.info("%s %s : veto de Claude (%s)", c.nom, symbole, raison)
         journaliser(**base_journal, volume=volume, action="veto", resultat="bloqué", raison=raison)
         return False
 
     ok, detail = c.ouvrir(symbole, sens, volume, stop, module) if envoyer else (False, motif)
+    publier(c.login, symbole, f"Signal {sens} · {raison} · {detail}")
     log.info("%s %s : entrée %s %s %.2f lot -> %s", c.nom, symbole, module, sens, volume, detail)
     journaliser(**base_journal, volume=volume, action="entrée",
                 resultat="ok" if ok else "non envoyé", raison=f"{signal['raison']} | {detail}")
@@ -133,16 +140,23 @@ def traiter_courtier(conf: dict) -> None:
                 signal = S.signal_entree(ligne)
                 if signal is None:
                     log.info("%s %s : aucun signal d'entrée", c.nom, symbole)
+                    publier(c.login, symbole, "Aucun signal d'entrée")
                 else:
                     log.info("%s %s : signal %s %s (%s), stop indicatif %s",
                              c.nom, symbole, signal["sens"], signal["module"],
                              signal["raison"], signal["stop"])
+                    publier(c.login, symbole, f"Signal {signal['sens']} · {signal['raison']}")
                 continue
 
-            gerer_sorties(c, symbole, ligne, envoyer, motif)
-
-            if bloque or c.positions(symbole) or nb_positions >= C.MAX_POSITIONS:
+            positions = c.positions_symbole(symbole)
+            if positions:
+                sorties = gerer_sorties(c, symbole, ligne, envoyer, motif)
+                publier(c.login, symbole, " | ".join(sorties) or "Position existante sur le symbole")
                 continue
+            if bloque or nb_positions >= C.MAX_POSITIONS:
+                publier(c.login, symbole, motif_arret if bloque else "Limite de positions atteinte")
+                continue
+            publier(c.login, symbole, f"Clôture {ligne['close']} · {ligne['regime']} · RSI {ligne['rsi']:.1f}")
             if chercher_entree(c, symbole, ligne, capital, envoyer, motif):
                 nb_positions += 1
     finally:
