@@ -25,8 +25,10 @@ CHAMPS_JOURNAL = ["date_utc", "mode", "courtier", "symbole", "action", "sens", "
 def configurer_log() -> None:
     log.setLevel(logging.INFO)
     format_log = logging.Formatter("%(asctime)s | %(levelname)s | %(message)s")
-    for gestionnaire in (logging.FileHandler(C.FICHIER_LOG, encoding="utf-8"),
-                         logging.StreamHandler(sys.stdout)):
+    gestionnaires = [logging.FileHandler(C.FICHIER_LOG, encoding="utf-8")]
+    if sys.stdout is not None:
+        gestionnaires.append(logging.StreamHandler(sys.stdout))
+    for gestionnaire in gestionnaires:
         gestionnaire.setFormatter(format_log)
         log.addHandler(gestionnaire)
 
@@ -67,7 +69,7 @@ def gerer_sorties(c: Courtier, symbole: str, ligne, envoyer: bool, motif: str) -
 
 
 def chercher_entree(c: Courtier, symbole: str, ligne, capital: float, envoyer: bool,
-                    motif: str) -> bool:
+                    motif: str, planificateur=None) -> bool:
     signal = S.signal_entree(ligne)
     if signal is None:
         return False
@@ -95,6 +97,8 @@ def chercher_entree(c: Courtier, symbole: str, ligne, capital: float, envoyer: b
         publier(c.login, symbole, f"Signal {sens} · {motif_taille}")
         log.info("%s %s : signal %s ignoré (%s)", c.nom, symbole, module, motif_taille)
         journaliser(**base_journal, action="refus taille", resultat="ignoré", raison=motif_taille)
+        return False
+    if planificateur is not None and not planificateur.reserver(c, symbole, ligne.name):
         return False
 
     donnees_veto = {
@@ -125,7 +129,7 @@ def chercher_entree(c: Courtier, symbole: str, ligne, capital: float, envoyer: b
     return ok
 
 
-def traiter_courtier(conf: dict) -> None:
+def traiter_courtier(conf: dict, planificateur=None) -> None:
     c = Courtier(conf)
     c.connecter()
     try:
@@ -147,8 +151,18 @@ def traiter_courtier(conf: dict) -> None:
                 log.warning("%s : symbole %s introuvable", c.nom, base)
                 continue
 
+            if planificateur is not None:
+                bougie = c.bougies(symbole, 1).index[-1]
+                positions = c.positions(symbole)
+                if C.MODE == "ORDRES" and capital <= 0 and not positions:
+                    publier(c.login, symbole, "En attente de fonds")
+                    continue
+                if not planificateur.nouveau(c, symbole, bougie, compte.balance, positions):
+                    continue
             donnees = S.preparer(c.bougies(symbole, 400))
             ligne = donnees.iloc[-1]
+            if planificateur is not None and ligne.name != bougie:
+                continue
             log.info("%s %s : clôture %s, régime %s (EBSW %.2f), RSI %.1f", c.nom, symbole,
                      ligne["close"], ligne["regime"], ligne["ebsw"], ligne["rsi"])
 
@@ -166,6 +180,8 @@ def traiter_courtier(conf: dict) -> None:
 
             positions = c.positions_symbole(symbole)
             if positions:
+                if planificateur is not None and not planificateur.reserver(c, symbole, ligne.name):
+                    continue
                 sorties = gerer_sorties(c, symbole, ligne, envoyer, motif)
                 publier(c.login, symbole, " | ".join(sorties) or "Position existante sur le symbole")
                 continue
@@ -173,8 +189,10 @@ def traiter_courtier(conf: dict) -> None:
                 publier(c.login, symbole, motif_arret if bloque else "Limite de positions atteinte")
                 continue
             publier(c.login, symbole, f"Clôture {ligne['close']} · {ligne['regime']} · RSI {ligne['rsi']:.1f}")
-            if chercher_entree(c, symbole, ligne, capital, envoyer, motif):
+            if chercher_entree(c, symbole, ligne, capital, envoyer, motif, planificateur):
                 nb_positions += 1
+        if planificateur is not None:
+            planificateur.relever(c, compte)
     finally:
         c.deconnecter()
 

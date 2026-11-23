@@ -33,7 +33,13 @@ Sur Windows, laisse MetaTrader 5 ouvert et double-clique sur `Ouvrir_Trading.vbs
 
 Ouvre `tableau_analyse.html` dans ton navigateur après l'exécution. Le compte peut rester vide. Les capitaux sont exprimés en USD, même sur un compte Cent en USC. Chaque nouvelle exécution actualise le rapport à partir des dernières bougies journalières clôturées. Aucun ordre n'est envoyé.
 
-Pour l'automatiser : Planificateur de tâches Windows, tous les jours de mardi à samedi à 7 h.
+### Exécution automatique sur Windows
+
+Depuis PowerShell, lance `powershell -NoProfile -ExecutionPolicy Bypass -File .\Installer_Automatique.ps1`. La tâche démarre immédiatement et à chaque ouverture de ta session Windows. Laisse le PC éveillé et le lecteur du projet accessible dans ta session. La tâche relit MT5 chaque minute. Le robot utilise la dernière clôture D1 confirmée par HFM et ne tente qu'une entrée par symbole et par clôture. Il réévalue les signaux si le solde change, et bloque les nouvelles entrées sans fonds ou sans signal admissible.
+
+La tâche lit le fichier `.env`. Pour le réel, active `HFM_ACTIF=oui`, `EXNESS_ACTIF=non`, `CLAUDE_ACTIF=oui`, `MODE=ORDRES` et `COMPTE_REEL_CONFIRME=oui`, puis redémarre la tâche après un changement. Le mode par défaut reste `TEST`. Quand la tâche tourne, utilise l'interface pour l'observer et évite de lancer `robot.py` en parallèle.
+
+`Ouvrir_Trading.vbs` affiche le compagnon animé et le résultat net du jour UTC des opérations identifiées comme celles du robot par MT5. Les rapports locaux sont conservés dans `rapports_automatiques`. Pour arrêter et retirer la tâche, relance l'installateur avec `-Desinstaller`. Les positions déjà ouvertes restent chez HFM et demeurent visibles dans MT5.
 
 ### Afficher les décisions dans MetaTrader 5
 

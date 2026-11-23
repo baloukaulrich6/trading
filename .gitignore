@@ -7,3 +7,8 @@ __pycache__/
 *.pyc
 
 tableau_analyse.html
+
+automatique.sqlite3*
+automatique_etat.json
+automatique_etat.tmp
+rapports_automatiques/

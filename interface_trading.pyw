@@ -1,9 +1,59 @@
 """Interface locale de lecture et de simulation pour MetaTrader 5."""
-from datetime import datetime
+import json
+from datetime import datetime, timezone
+from pathlib import Path
 from queue import Empty, Queue
 from threading import Thread
 import tkinter as tk
 from tkinter import messagebox, ttk
+
+ETAT_AUTOMATIQUE = Path(__file__).with_name("automatique_etat.json")
+
+
+class Compagnon(ttk.Frame):
+    def __init__(self, parent):
+        super().__init__(parent)
+        fond = "#13243a"
+        self.dessin = tk.Canvas(self, width=90, height=96, bg=fond, highlightthickness=0)
+        self.dessin.pack(side="left")
+        self.dessin.create_oval(20, 76, 70, 84, fill="#0b1424", outline="")
+        self.dessin.create_line(45, 20, 45, 34, fill="#7cc9f8", width=3, tags="robot")
+        self.signal = self.dessin.create_oval(40, 15, 50, 25, fill="#f6af69", outline="", tags="robot")
+        self.dessin.create_rectangle(18, 34, 72, 70, fill="#36658a", outline="#7cc9f8", width=2, tags="robot")
+        self.dessin.create_rectangle(25, 41, 65, 61, fill="#102132", outline="", tags="robot")
+        for x in (34, 50):
+            self.dessin.create_oval(x, 46, x + 6, 53, fill="#c2f6ff", outline="", tags="robot")
+        self.texte = tk.StringVar()
+        tk.Label(self, textvariable=self.texte, bg=fond, fg="#eaf6ff", font=("Segoe UI", 11),
+                 anchor="w", justify="left", padx=12, wraplength=650).pack(side="left", fill="both", expand=True)
+        self.pas = 0
+        self.actif = False
+        self.lire()
+        self.animer()
+
+    def lire(self):
+        try:
+            etat = json.loads(ETAT_AUTOMATIQUE.read_text(encoding="utf-8"))
+            age = (datetime.now(timezone.utc) - datetime.fromisoformat(etat["heure"])).total_seconds()
+            self.actif = age < 180
+            lignes = [f"Automatique · {etat['mode']} · {etat['statut']}" if self.actif
+                      else f"Dernier rapport · {etat['mode']} · mise à jour en attente"]
+            for rapport in etat["rapports"]:
+                net = rapport["resultat"]
+                resultat = f"{net:+.2f} {rapport['devise']}" if net is not None else "indisponible"
+                lignes.append(f"{rapport['courtier']}  |  {rapport['positions']} position(s) du robot"
+                              f"  |  Net du jour UTC : {resultat}")
+            self.texte.set("\n".join(lignes))
+        except (OSError, ValueError, KeyError):
+            self.actif = False
+            self.texte.set("Surveillance automatique en attente d’un premier rapport.")
+        self.after(3000, self.lire)
+
+    def animer(self):
+        self.pas = (self.pas + 1) % 8
+        self.dessin.move("robot", 0, -1 if self.pas < 4 else 1)
+        self.dessin.itemconfigure(self.signal, fill="#72ded0" if self.actif else "#f6af69")
+        self.after(170, self.animer)
 
 
 def charger_analyse(scenarios):
@@ -40,6 +90,7 @@ class Interface:
         panneau.pack(fill="both", expand=True)
         ttk.Label(panneau, text="Analyse MT5", font=("Segoe UI", 24, "bold")).pack(anchor="w")
         ttk.Label(panneau, text="Lecture seule · Dernières bougies D1 clôturées · Aucun ordre").pack(anchor="w", pady=(0, 14))
+        Compagnon(panneau).pack(fill="x", pady=(0, 12))
         outils = ttk.Frame(panneau)
         outils.pack(fill="x")
         ttk.Label(outils, text="Capitaux fictifs (USD)").pack(side="left")
