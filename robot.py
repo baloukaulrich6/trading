@@ -152,6 +152,9 @@ def traiter_courtier(conf: dict, planificateur=None) -> None:
                 continue
 
             if planificateur is not None:
+                if planificateur.fantome is not None:
+                    planificateur.observer(c, base, c.bougies(symbole, 400))
+                    continue
                 bougie = c.bougies(symbole, 1).index[-1]
                 positions = c.positions(symbole)
                 if C.MODE == "ORDRES" and capital <= 0 and not positions:

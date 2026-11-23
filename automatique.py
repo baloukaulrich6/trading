@@ -70,6 +70,34 @@ class Planificateur:
         self.rapports = []
         self.observations = {}
         self.demarrage_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+        self.observations_fantomes = []
+        self.fantome = None
+        self.versions_fantomes = []
+        if os.getenv("NKAP_FANTOME", "non").strip().lower() == "oui":
+            if C.MODE != "TEST":
+                raise ValueError("La collecte NKAP_FANTOME demande MODE=TEST.")
+            from nkap.configuration import Parametres, charger_config
+            from nkap.service.fantome import Fantome
+
+            dossier = BASE / "observations_nkap"
+            dossier.mkdir(exist_ok=True)
+            self.fantome = Fantome(dossier / "fantome.sqlite3")
+            _, champion, _ = charger_config(BASE / "config")
+            autre = "er" if champion.regime == "ebsw" else "ebsw"
+            self.versions_fantomes = [
+                champion, Parametres.model_validate({**champion.model_dump(), "version": f"fantome-{autre}",
+                                                    "regime": autre}),
+            ]
+
+    def observer(self, courtier, marche, bougies):
+        if self.fantome is None:
+            return
+        donnees = bougies.sort_index()
+        donnees.index = donnees.index.tz_localize("UTC")
+        for p in self.versions_fantomes:
+            self.observations_fantomes.append(
+                self.fantome.observer(courtier.nom, marche, donnees, p, datetime.now(timezone.utc))
+            )
 
     def entrees_permises(self):
         return fenetre_entree(datetime.now(timezone.utc))
@@ -179,7 +207,10 @@ class Planificateur:
                 for r in self.rapports
             },
             "evenements": activite(),
+            "fantome": self.observations_fantomes if self.fantome is not None else None,
         }, ensure_ascii=False)
+        if self.fantome is not None:
+            self.fantome.exporter(BASE / "observations_nkap" / "rapport.csv")
         dossier = BASE / "rapports_automatiques"
         dossier.mkdir(exist_ok=True)
         date = datetime.fromisoformat(etat["heure"]).astimezone(rapport.DOUALA).date()
@@ -200,6 +231,7 @@ def main():
     actifs = [conf for conf in C.COURTIERS if conf["actif"]]
     while True:
         planificateur.rapports.clear()
+        planificateur.observations_fantomes.clear()
         erreurs = []
         for conf in actifs:
             try:

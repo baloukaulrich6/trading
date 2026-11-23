@@ -458,6 +458,11 @@ body.mode-demo .demo{display:block}
       <h2 id="t-positions">Positions ouvertes</h2>
       <div id="positions"></div>
     </section>
+    <section class="panneau" id="fantome" aria-labelledby="t-fantome" hidden>
+      <h2 id="t-fantome">Observations sur le marché</h2>
+      <p>Signaux D1 des deux versions, en mode fantôme.</p>
+      <ul id="observations"></ul>
+    </section>
   </div>
   <section class="panneau fil" aria-labelledby="t-fil">
     <h2 id="t-fil">Ce que Nkap a fait</h2>
@@ -530,6 +535,13 @@ body.mode-demo .demo{display:block}
   let prochainReveil = null;
 
   function afficher(etat) {
+    $("fantome").hidden = !Array.isArray(etat.fantome);
+    $("observations").replaceChildren(...(etat.fantome || []).map((observation) => {
+      const element = document.createElement("li");
+      element.textContent = [observation.marche, observation.version,
+        observation.signal || "Aucun signal", observation.module].filter(Boolean).join(" · ");
+      return element;
+    }));
     const humeur = etat.humeur || "sommeil";
     corps.dataset.humeur = humeur;
     corps.dataset.moment = MOMENTS[humeur] || "nuit";

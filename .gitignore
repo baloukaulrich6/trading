@@ -17,3 +17,5 @@ rapports_automatiques/
 *.egg-info/
 
 exports_d1/
+
+observations_nkap/
