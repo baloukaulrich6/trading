@@ -19,9 +19,11 @@ Bloque le trade si au moins une condition est vraie :
    marché fermé ou jour férié majeur.
 3. Les données transmises sont incohérentes (prix, stop ou volume anormaux).
 
-Sinon, autorise. Utilise la recherche web pour vérifier le calendrier économique du jour.
-Termine ta réponse par un objet JSON sur une seule ligne :
-{"decision": "autoriser" ou "bloquer", "raison": "phrase courte en français"}"""
+Utilise la recherche web pour vérifier le calendrier économique du jour.
+Bloque si la vérification est indisponible ou insuffisante.
+Sinon, autorise. Après la recherche, réponds uniquement avec un objet JSON, sans Markdown.
+Exemple de format : {"decision":"bloquer","raison":"Calendrier économique indisponible"}
+Les deux valeurs de décision possibles sont "autoriser" et "bloquer"."""
 
 
 def lire_decision_stricte(texte: str) -> tuple[bool, str]:
@@ -56,7 +58,9 @@ def demander_veto(donnees: dict) -> tuple[bool, str]:
         return False, "clé API Claude absente : aucun nouveau trade"
 
     try:
-        return lire_decision(interroger_claude(donnees))
+        return lire_decision_stricte(interroger_claude(donnees))
+    except ValueError as erreur:
+        return False, f"{erreur} : trade bloqué par prudence"
     except Exception as erreur:  # réseau, clé invalide, quota...
         log.warning("Claude injoignable : %s", erreur)
         return False, "Claude injoignable : aucun nouveau trade aujourd'hui"
@@ -77,14 +81,27 @@ def interroger_claude(donnees: dict, *, diagnostic: bool = False) -> str:
             'Réponds uniquement par un objet JSON avec "decision" ("autoriser" ou "bloquer") '
             'et "raison" (une courte phrase en français).'
         )}
-    reponse = client.messages.create(
-        model=C.CLAUDE_MODELE,
-        max_tokens=1024,
-        messages=[{"role": "user", "content": json.dumps(donnees, ensure_ascii=False)}],
-        **options,
-    )
-    texte = "".join(b.text for b in reponse.content if b.type == "text")
-    if diagnostic and (not texte.strip() or reponse.stop_reason != "end_turn"):
-        blocs = ", ".join(b.type for b in reponse.content) or "aucun"
-        raise ValueError(f"réponse texte incomplète (arrêt : {reponse.stop_reason}, blocs : {blocs})")
-    return texte
+    messages = [{"role": "user", "content": json.dumps(donnees, ensure_ascii=False)}]
+    recherche_ok = False
+    for _ in range(1 if diagnostic else 3):
+        reponse = client.messages.create(
+            model=C.CLAUDE_MODELE,
+            max_tokens=1024 if diagnostic else 4096,
+            messages=messages,
+            **options,
+        )
+        recherche_ok |= any(
+            bloc.type == "web_search_tool_result" and isinstance(bloc.content, list) and bloc.content
+            for bloc in reponse.content
+        )
+        if reponse.stop_reason == "pause_turn" and not diagnostic:
+            messages.append({"role": "assistant", "content": reponse.content})
+            continue
+        texte = "\n".join(b.text for b in reponse.content if b.type == "text")
+        if not texte.strip() or reponse.stop_reason != "end_turn":
+            blocs = ", ".join(b.type for b in reponse.content) or "aucun"
+            raise ValueError(f"réponse texte incomplète (arrêt : {reponse.stop_reason}, blocs : {blocs})")
+        if not diagnostic and not recherche_ok and lire_decision_stricte(texte)[0]:
+            raise ValueError("autorisation sans résultat de recherche web")
+        return texte
+    raise ValueError("recherche Claude inachevée après deux reprises")
