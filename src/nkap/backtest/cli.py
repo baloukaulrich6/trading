@@ -50,6 +50,9 @@ def main() -> int:
         rapport = asdict(evaluation)
         rapport["admission_reel"] = False
         rapport["comparaison"] = "Règles seules, EBSW contre ER en formation, aucun appel API"
+        rapport["comparaison_filtre_analyste"] = asdict(walk_forward(
+            args.marche, data, champion, limites, couts, args.capital, avec_agents=True
+        ))
         if args.reserve:
             rapport["reserve"] = asdict(verifier_reserve(
                 args.marche, data, champion, limites, couts, args.capital, evaluation

@@ -1,4 +1,5 @@
 """Simulation événementielle D1 en devise USD, sans accès au courtier."""
+from collections.abc import Callable
 from dataclasses import dataclass
 from math import floor, isfinite
 
@@ -51,7 +52,8 @@ class Simulation:
 
 
 def simuler(marche: str, donnees: pd.DataFrame, p: Parametres, limites: Limites,
-            couts: Couts, depart: pd.Timestamp, fin: pd.Timestamp, capital_initial: float) -> Simulation:
+            couts: Couts, depart: pd.Timestamp, fin: pd.Timestamp, capital_initial: float, *,
+            filtre_signal: Callable[[Signal, pd.Series], bool] | None = None) -> Simulation:
     if not isfinite(capital_initial) or capital_initial <= 0:
         raise ValueError("Le capital initial doit être positif.")
     donnees = preparer(donnees.loc[donnees.index < fin], p)
@@ -121,6 +123,8 @@ def simuler(marche: str, donnees: pd.DataFrame, p: Parametres, limites: Limites,
                 and depuis_perte < limites.pause_apres):
             module = "TUR" if bougie["tendance"] else "CTR"
             signal = strategies[module].entree(marche, bougie, p)
+            if signal is not None and filtre_signal is not None and not filtre_signal(signal, bougie):
+                signal = None
             if signal is not None:
                 capital -= couts.claude_par_signal
                 claude += couts.claude_par_signal

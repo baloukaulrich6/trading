@@ -7,7 +7,7 @@ from math import isfinite
 from pathlib import Path
 
 from nkap.backtest.metriques import Mesures
-from nkap.backtest.walk_forward import Evaluation
+from nkap.backtest.walk_forward import Evaluation, motifs_refus
 from nkap.configuration import Parametres
 
 
@@ -21,7 +21,8 @@ class Fantome:
 
 def admissible(champion: Mesures, challenger: Evaluation, fantome: Fantome) -> bool:
     nouveau = challenger.mesures
-    if challenger.refus or champion.calmar is None or nouveau.calmar is None:
+    if (challenger.refus or motifs_refus(nouveau, challenger.fenetres)
+            or champion.calmar is None or nouveau.calmar is None):
         return False
     return (
         isfinite(champion.calmar) and champion.calmar > 0

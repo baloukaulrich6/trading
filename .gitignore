@@ -15,3 +15,5 @@ rapports_automatiques/
 
 .coverage
 *.egg-info/
+
+exports_d1/

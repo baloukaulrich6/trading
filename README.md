@@ -83,3 +83,10 @@ Une nouvelle entrée sur un compte réel requiert aussi `CLAUDE_ACTIF=oui` et un
 - Sur un serveur réel (nom contenant « Real » ou « Live »), aucun ordre ne part sans `COMPTE_REEL_CONFIRME=oui`.
 - Ne partage jamais le fichier `.env`.
 - Résultats passés ≠ résultats futurs. La majorité des comptes CFD de particuliers perdent de l'argent.
+
+## Recherche Nkap multi-agents
+
+Installe le paquet avec `python -m pip install -e ".[dev]"`, puis consulte
+[la procédure d'export et de validation](docs/exploitation.md). Le rapport de recherche
+ne modifie pas les paramètres des lanceurs MT5 existants. L'avancement et les écarts
+sont consignés dans [les décisions](docs/decisions.md).

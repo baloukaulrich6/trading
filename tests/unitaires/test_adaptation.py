@@ -6,7 +6,7 @@ import pytest
 
 from nkap.adaptation.versions import Fantome, Versions, proposer
 from nkap.backtest.metriques import Mesures
-from nkap.backtest.walk_forward import Evaluation
+from nkap.backtest.walk_forward import Evaluation, Fenetre
 from nkap.configuration import charger_config
 
 
@@ -17,10 +17,14 @@ def test_challenger_et_promotion_reversible(tmp_path):
     p = proposer(champion, "er-1", {"regime": "er", "seuil_er": 0.4})
     ancien = Mesures(100, .12, .12, 1, 1.4, 110, 0)
     nouveau = replace(ancien, calmar=1.2, drawdown=.10)
-    evaluation = Evaluation((), nouveau, None, (), "", "")
+    fenetres = tuple(Fenetre(f"{an}-01-01", f"{an + 1}-01-01", p.version, nouveau)
+                     for an in range(2021, 2024))
+    evaluation = Evaluation(fenetres, nouveau, None, (), "", "")
     jour = datetime(2025, 3, 1, tzinfo=UTC)
     fantome = Fantome(jour, jour + timedelta(days=28), True, nouveau)
     v = Versions(tmp_path / "versions.db", champion)
+    assert not v.promouvoir(p, ancien, replace(evaluation, fenetres=()), fantome,
+                            operateur="test", date=jour, confirme=True)
     assert not v.promouvoir(p, ancien, evaluation, fantome, operateur="test", date=jour, confirme=False)
     assert not v.promouvoir(p, ancien, evaluation, replace(fantome, sans_ordres=False),
                             operateur="test", date=jour, confirme=True)
