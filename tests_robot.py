@@ -45,6 +45,9 @@ faux.CAPITAL = 10000.0
 faux.ACCOUNT_TRADE_MODE_DEMO = 0
 faux.TRADE_RETCODE_DONE_PARTIAL = 10010
 faux.terminal_info = lambda: None
+faux.order_calc_profit = lambda *args: -1.0
+faux.order_calc_margin = lambda *args: 1.0
+faux.order_check = lambda demande: types.SimpleNamespace(retcode=0)
 faux.COMPTE = {}
 
 
@@ -57,7 +60,7 @@ faux.initialize = _initialiser
 faux.shutdown = lambda: None
 faux.last_error = lambda: (0, "ok")
 faux.account_info = lambda: types.SimpleNamespace(login=1, equity=faux.CAPITAL, currency="USC",
-                                                  leverage=100,
+                                                  leverage=100, margin_free=faux.CAPITAL,
                                                   server=faux.COMPTE.get("server", ""),
                                                   trade_mode=2 if "Real" in faux.COMPTE.get("server", "") else 0)
 

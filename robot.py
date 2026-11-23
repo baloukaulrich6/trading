@@ -78,9 +78,19 @@ def chercher_entree(c: Courtier, symbole: str, ligne, capital: float, envoyer: b
     stop = prix - distance if sens == "achat" else prix + distance
 
     info = c.info_symbole(symbole)
-    volume, motif_taille = R.taille_position(capital, distance, info)
     base_journal = dict(courtier=c.nom, symbole=symbole, sens=sens, module=module,
                         prix=round(prix, info.digits), stop=round(stop, info.digits))
+    try:
+        perte_min, marge_min = c.cout_ordre(symbole, sens, info.volume_min, prix, base_journal["stop"])
+        compte = c.infos_compte()
+        if marge_min > compte.margin_free:
+            volume, motif_taille = 0.0, f"marge minimale trop élevée ({marge_min:.2f} {compte.currency})"
+        else:
+            volume, motif_taille = R.taille_position(
+                capital, distance, info, perte_par_lot=perte_min / info.volume_min
+            )
+    except ValueError as erreur:
+        volume, motif_taille = 0.0, str(erreur)
     if volume == 0:
         publier(c.login, symbole, f"Signal {sens} · {motif_taille}")
         log.info("%s %s : signal %s ignoré (%s)", c.nom, symbole, module, motif_taille)

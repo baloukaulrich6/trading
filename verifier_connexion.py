@@ -4,7 +4,6 @@
 Aucun ordre n'est envoyé.
 """
 import config as C
-import risque as R
 import strategie as S
 from courtier import Courtier
 
@@ -18,8 +17,8 @@ def verifier(conf: dict) -> None:
         print(f"Compte {compte.login} | serveur {c.serveur} | "
               f"{'RÉEL' if c.est_compte_reel() else 'démo'}")
         print(f"Capital {compte.equity:.2f} {compte.currency} | levier 1:{compte.leverage}")
-        if compte.leverage > 100:
-            print("  Conseil : baisse l'effet de levier à 1:100 dans l'espace client.")
+        print(f"Marge libre {compte.margin_free:.2f} {compte.currency} | "
+              f"Budget au stop {compte.equity * C.RISQUE_PAR_TRADE:.2f} {compte.currency}")
 
         for base in C.SYMBOLES:
             symbole = c.trouver_symbole(base)
@@ -29,10 +28,24 @@ def verifier(conf: dict) -> None:
             info = c.info_symbole(symbole)
             ligne = S.preparer(c.bougies(symbole, 400)).iloc[-1]
             distance = C.STOP_EN_N * ligne["atr"]
-            volume, motif = R.taille_position(compte.equity, distance, info)
-            print(f"- {base} -> {symbole} | écart {info.spread} points | lot mini {info.volume_min} "
-                  f"| stop 2N = {distance:.{info.digits}f} | taille à 1 % : "
-                  f"{volume if volume else 'IMPOSSIBLE'} ({motif})")
+            signal = S.signal_entree(ligne)
+            print(f"- {symbole} | lot minimal {info.volume_min} | "
+                  f"signal : {signal['sens'] if signal else 'aucun'}")
+            for sens in ("achat", "vente"):
+                try:
+                    prix = c.prix_actuel(symbole, sens)
+                    stop = round(prix - distance if sens == "achat" else prix + distance, info.digits)
+                    risque, marge = c.cout_ordre(symbole, sens, info.volume_min, prix, stop)
+                    limites = []
+                    if risque > compte.equity * C.RISQUE_PAR_TRADE:
+                        limites.append("risque trop élevé")
+                    if marge > compte.margin_free:
+                        limites.append("marge insuffisante")
+                    resultat = ", ".join(limites) or "lot minimal compatible"
+                    print(f"  {sens} : risque {risque:.2f} {compte.currency} | "
+                          f"marge {marge:.2f} {compte.currency} | {resultat}")
+                except ValueError as erreur:
+                    print(f"  {sens} : {erreur}")
     finally:
         c.deconnecter()
 

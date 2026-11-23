@@ -1,6 +1,7 @@
 """Connexion à un terminal MetaTrader 5 (Exness ou HFM) : données, positions et ordres."""
 import logging
 import os
+from math import isfinite
 
 import MetaTrader5 as mt5
 import pandas as pd
@@ -88,7 +89,22 @@ class Courtier:
 
     def prix_actuel(self, symbole: str, sens: str) -> float:
         tick = mt5.symbol_info_tick(symbole)
+        if tick is None:
+            raise ValueError(f"Cotation MT5 indisponible pour {symbole}.")
         return tick.ask if sens == "achat" else tick.bid
+
+    def cout_ordre(self, symbole: str, sens: str, volume: float, prix: float, stop: float):
+        """Retourne le risque au stop et la marge, dans la devise du compte."""
+        if not all(isfinite(v) and v > 0 for v in (volume, prix, stop)):
+            raise ValueError("Prix, volume ou stop invalide.")
+        type_ordre = mt5.ORDER_TYPE_BUY if sens == "achat" else mt5.ORDER_TYPE_SELL
+        profit = mt5.order_calc_profit(type_ordre, symbole, volume, prix, stop)
+        marge = mt5.order_calc_margin(type_ordre, symbole, volume, prix)
+        if profit is None or marge is None or not isfinite(profit) or not isfinite(marge):
+            raise ValueError(f"Calcul du risque ou de la marge indisponible pour {symbole}.")
+        if profit >= 0 or marge < 0:
+            raise ValueError(f"Stop ou marge incohérent pour {symbole}.")
+        return -profit, marge
 
     def positions(self, symbole: str = None) -> list:
         brutes = self.positions_symbole(symbole) if symbole else mt5.positions_get()
@@ -111,19 +127,36 @@ class Courtier:
         if self.positions_symbole(symbole):
             return False, "une position existe déjà sur ce symbole"
         info = mt5.symbol_info(symbole)
+        prix = self.prix_actuel(symbole, sens)
+        stop = round(float(stop), info.digits)
+        compte = self.infos_compte()
+        try:
+            risque, marge = self.cout_ordre(symbole, sens, volume, prix, stop)
+        except ValueError as erreur:
+            return False, str(erreur)
+        if risque > compte.equity * C.RISQUE_PAR_TRADE:
+            return False, f"perte au stop recalculée trop élevée ({risque:.2f} {compte.currency})"
+        if marge > compte.margin_free:
+            return False, f"marge insuffisante ({marge:.2f} {compte.currency} requise)"
         demande = {
             "action": mt5.TRADE_ACTION_DEAL,
             "symbol": symbole,
             "volume": volume,
             "type": mt5.ORDER_TYPE_BUY if sens == "achat" else mt5.ORDER_TYPE_SELL,
-            "price": self.prix_actuel(symbole, sens),
-            "sl": round(float(stop), info.digits),
+            "price": prix,
+            "sl": stop,
             "deviation": 20,
             "magic": C.MAGIC,
             "comment": module,
             "type_time": mt5.ORDER_TIME_GTC,
             "type_filling": self._remplissage(info),
         }
+        controle = mt5.order_check(demande)
+        if controle is None:
+            return False, f"contrôle MT5 indisponible ({mt5.last_error()})"
+        if controle.retcode != 0:
+            return False, f"contrôle MT5 refusé ({controle.retcode} : {controle.comment})"
+        self.verifier_envoi()
         resultat = mt5.order_send(demande)
         if resultat is None:
             return False, f"order_send a échoué {mt5.last_error()}"

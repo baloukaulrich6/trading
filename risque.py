@@ -6,16 +6,22 @@ import os
 import config as C
 
 
-def taille_position(capital: float, distance_stop: float, info) -> tuple[float, str]:
+def taille_position(capital: float, distance_stop: float, info, *,
+                    perte_par_lot: float | None = None) -> tuple[float, str]:
     """Volume en lots pour perdre au plus RISQUE_PAR_TRADE du capital si le stop est touché.
 
     `info` = mt5.symbol_info(symbole). Fonctionne pour les comptes standard ET cent,
     car la valeur du tick est donnée dans la devise du compte (USD ou USC).
     """
-    if distance_stop <= 0 or info.trade_tick_size <= 0 or info.trade_tick_value <= 0:
+    if distance_stop <= 0 or info.volume_step <= 0:
         return 0.0, "données du symbole invalides"
 
-    perte_par_lot = distance_stop / info.trade_tick_size * info.trade_tick_value
+    if perte_par_lot is None:
+        if info.trade_tick_size <= 0 or info.trade_tick_value <= 0:
+            return 0.0, "données du symbole invalides"
+        perte_par_lot = distance_stop / info.trade_tick_size * info.trade_tick_value
+    if not math.isfinite(perte_par_lot) or perte_par_lot <= 0:
+        return 0.0, "perte au stop indisponible"
     risque_max = capital * C.RISQUE_PAR_TRADE
     pas = info.volume_step
 
