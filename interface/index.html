@@ -449,6 +449,7 @@ body.mode-demo .demo{display:block}
       <div class="reveil-ligne">
         <span id="reveil">Prochain réveil : <b>…</b></span>
         <span id="veto">Veto de Claude : actif</span>
+        <span id="fenetre-entree"></span>
       </div>
     </div>
   </div>
@@ -585,6 +586,9 @@ body.mode-demo .demo{display:block}
       : reel ? "Ordres réels activés" : "Ordres sur compte démo";
     $("mode").classList.toggle("reel", !!reel);
     $("veto").textContent = etat.veto_claude ? "Veto de Claude : actif" : "Veto de Claude : désactivé";
+    $("fenetre-entree").textContent = typeof etat.entrees_ouvertes === "boolean"
+      ? `Entrées ${etat.entrees_ouvertes ? "ouvertes" : "fermées"} · ${etat.heure_entree}–${etat.heure_limite} (Douala)`
+      : "";
     prochainReveil = etat.prochain_reveil ? new Date(etat.prochain_reveil) : null;
     majReveil();
 
@@ -602,6 +606,7 @@ body.mode-demo .demo{display:block}
           <span>Exécutions<strong>${echap(c.trades_semaine ?? "—")}</strong></span>
         </div>
         <div class="details-compte">${c.connecte ? `Levier 1:${echap(c.levier ?? "?")}, serveur ${echap(c.serveur || "")}` : "Injoignable : vérifie que MT5 est ouvert et connecté."}</div>
+        ${Number.isFinite(etat.risque_pct) ? `<div class="details-compte">Risque chargé : ${nombre.format(etat.risque_pct)} % · Budget au stop : ${nombre.format(c.capital * etat.risque_pct / 100)} ${echap(c.devise)}</div>` : ""}
       </div>`;
     }).join("") : `<div class="equivalent">Aucun compte connecté pour l'instant.</div>`;
 

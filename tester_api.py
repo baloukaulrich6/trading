@@ -1,4 +1,5 @@
 """Vérifie MT5 et le veto Claude sur un exemple fictif, sans envoyer d'ordre."""
+import argparse
 from datetime import datetime, timezone
 
 import config as C
@@ -24,7 +25,7 @@ def tester_mt5(conf: dict) -> str:
         courtier.deconnecter()
 
 
-def tester_claude() -> str:
+def tester_claude(*, avec_recherche: bool = False) -> str:
     if not C.ANTHROPIC_API_KEY:
         raise ValueError("ANTHROPIC_API_KEY est absente de .env")
     exemple = {
@@ -32,18 +33,24 @@ def tester_claude() -> str:
         "symbole": "EURUSD",
         "sens": "achat",
         "module": "TUR",
-        "raison_signal": "Exemple fictif avec volume nul. Vérifier le veto, sans ordre.",
+        "raison_signal": ("Exemple fictif. Utiliser la recherche web pour vérifier le calendrier, sans ordre."
+                         if avec_recherche else "Exemple fictif avec volume nul. Vérifier le veto, sans ordre."),
         "prix": 1.10,
         "stop": 1.09,
-        "volume": 0,
+        "volume": 0.01 if avec_recherche else 0,
     }
-    autorise, raison = lire_decision_stricte(interroger_claude(exemple, diagnostic=True))
-    if autorise:
+    autorise, raison = lire_decision_stricte(interroger_claude(
+        exemple, diagnostic=not avec_recherche, verifier_recherche=avec_recherche
+    ))
+    if autorise and not avec_recherche:
         raise ValueError("Le modèle a autorisé un volume nul. Le test attend un blocage.")
+    if avec_recherche:
+        decision = "autoriser" if autorise else "bloquer"
+        return f"Claude OK · {C.CLAUDE_MODELE} · recherche web reçue · décision {decision} : {raison}"
     return f"Claude OK · {C.CLAUDE_MODELE} · test sans recherche web · blocage attendu : {raison}"
 
 
-def diagnostic() -> tuple[int, list[str]]:
+def diagnostic(*, avec_recherche: bool = False) -> tuple[int, list[str]]:
     messages = []
     actifs = [conf for conf in C.COURTIERS if conf["actif"]]
     reussi = bool(actifs)
@@ -56,7 +63,7 @@ def diagnostic() -> tuple[int, list[str]]:
             reussi = False
             messages.append(f"MT5 ÉCHEC · {conf['nom']} · {erreur}")
     try:
-        messages.append(tester_claude())
+        messages.append(tester_claude(avec_recherche=avec_recherche))
     except Exception as erreur:
         reussi = False
         statut = getattr(erreur, "status_code", None)
@@ -68,7 +75,11 @@ def diagnostic() -> tuple[int, list[str]]:
 
 
 def main() -> int:
-    code, messages = diagnostic()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--avec-recherche", action="store_true",
+                        help="Teste aussi la recherche web de Claude, sans ordre")
+    args = parser.parse_args()
+    code, messages = diagnostic(avec_recherche=args.avec_recherche)
     print("\n".join(messages))
     return code
 
