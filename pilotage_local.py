@@ -5,13 +5,17 @@ from threading import Event, Lock
 
 
 class Pilotage:
-    def __init__(self) -> None:
+    def __init__(self, hfm_reel: dict | None = None) -> None:
         self.jeton = token_urlsafe(32)
         self.reveil = Event()
         self._verrou = Lock()
         self._demande = "TEST"
         self._applique = "TEST"
         self.demo = self._lire_demo()
+        self.reel = (
+            {**hfm_reel, "reel_uniquement": True, "reel_confirme": True}
+            if hfm_reel and hfm_reel["login"] and hfm_reel["serveur"] else None
+        )
 
     @staticmethod
     def _lire_demo() -> dict | None:
@@ -29,16 +33,18 @@ class Pilotage:
     def etat(self) -> dict:
         with self._verrou:
             return {"demande": self._demande, "applique": self._applique,
-                    "demo_disponible": self.demo is not None, "reel_disponible": False,
-                    "raison_reel": "Validation hors échantillon et semaine en démo encore requises."}
+                    "demo_disponible": self.demo is not None, "reel_disponible": self.reel is not None}
 
-    def demander(self, choix: str) -> tuple[int, str]:
+    def demander(self, choix: str, *, confirmer_reel: bool = False) -> tuple[int, str]:
         with self._verrou:
             if choix == "REEL":
-                return 409, "Réel verrouillé : backtest, réserve et semaine en démo requis."
+                if self.reel is None:
+                    return 409, "Renseigne le compte HFM réel dans .env, puis relance la tâche."
+                if not confirmer_reel:
+                    return 409, "Confirme explicitement le passage en réel."
             if choix == "DEMO" and self.demo is None:
                 return 409, "Renseigne HFM_DEMO_LOGIN et HFM_DEMO_SERVEUR dans .env, puis relance la tâche."
-            if choix not in ("TEST", "DEMO"):
+            if choix not in ("TEST", "DEMO", "REEL"):
                 return 400, "Mode inconnu."
             self._demande = choix
             self.reveil.set()

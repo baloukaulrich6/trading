@@ -226,7 +226,7 @@ def main():
     robot.configurer_log()
     pilotage = None
     if os.getenv("NKAP_CHOIX_MODE", "non").strip().lower() == "oui":
-        pilotage = Pilotage()
+        pilotage = Pilotage(next((c for c in C.COURTIERS if c["nom"] == "HFM" and c["actif"]), None))
         C.MODE = "TEST"
     tableau_de_bord.PILOTAGE = pilotage
     planificateur = Planificateur()
@@ -239,9 +239,11 @@ def main():
         actifs = configurations
         if pilotage is not None:
             mode = pilotage.appliquer()
-            C.MODE = "ORDRES" if mode == "DEMO" else "TEST"
+            C.MODE = "ORDRES" if mode in ("DEMO", "REEL") else "TEST"
             if mode == "DEMO" and pilotage.demo is not None:
                 actifs = [pilotage.demo]
+            elif mode == "REEL" and pilotage.reel is not None:
+                actifs = [pilotage.reel]
         planificateur.rapports.clear()
         planificateur.observations_fantomes.clear()
         erreurs = []

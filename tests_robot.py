@@ -43,6 +43,7 @@ DONNEES = {nom: _serie(4000, v[0], v[1]) for nom, v in SYMBOLES_FAUX.items()}
 faux.CAPITAL = 10000.0
 
 faux.ACCOUNT_TRADE_MODE_DEMO = 0
+faux.ACCOUNT_TRADE_MODE_REAL = 2
 faux.TRADE_RETCODE_DONE_PARTIAL = 10010
 faux.terminal_info = lambda: None
 faux.order_calc_profit = lambda *args: -1.0

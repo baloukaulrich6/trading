@@ -687,12 +687,16 @@ body.mode-demo .demo{display:block}
   for (const bouton of boutonsMode) {
     bouton.addEventListener("click", async () => {
       if (!pilotage) return;
+      const mode = bouton.dataset.mode;
+      const confirmerReel = mode === "REEL" && pilotage.reel_disponible &&
+        window.confirm("Passer Nkap en réel sur HFM ? Le robot pourra engager ton argent.");
+      if (mode === "REEL" && pilotage.reel_disponible && !confirmerReel) return;
       boutonsMode.forEach((b) => { b.disabled = true; });
       try {
         const r = await fetch("/api/pilotage", {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Nkap-Token": pilotage.jeton },
-          body: JSON.stringify({ mode: bouton.dataset.mode })
+          body: JSON.stringify({ mode, confirmer_reel: confirmerReel })
         });
         const etat = await r.json();
         $("message-pilotage").textContent = etat.message;

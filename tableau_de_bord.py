@@ -70,7 +70,7 @@ class _Gestionnaire(BaseHTTPRequestHandler):
         except (ValueError, UnicodeError):
             self._json(400, {"message": "Demande invalide."})
             return
-        code, message = PILOTAGE.demander(demande["mode"])
+        code, message = PILOTAGE.demander(demande["mode"], confirmer_reel=demande.get("confirmer_reel") is True)
         self._json(code, {"message": message, **PILOTAGE.etat()})
 
     def log_message(self, *args):  # pas de bruit dans les logs

@@ -47,8 +47,8 @@ def journaliser(**champs) -> None:
 def ordres_autorises(c: Courtier) -> tuple[bool, str]:
     if C.MODE != "ORDRES":
         return False, "mode TEST : aucun ordre envoyé"
-    if c.est_compte_reel() and os.getenv("COMPTE_REEL_CONFIRME", "non").lower() != "oui":
-        return False, "compte RÉEL détecté sans COMPTE_REEL_CONFIRME=oui : aucun ordre envoyé"
+    if c.est_compte_reel() and not c.reel_autorise():
+        return False, "compte RÉEL sans confirmation : aucun ordre envoyé"
     return True, "ok"
 
 

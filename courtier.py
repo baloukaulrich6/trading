@@ -19,6 +19,8 @@ class Courtier:
         self.serveur = conf["serveur"]
         self.chemin = conf["chemin"]
         self.demo_uniquement = conf.get("demo_uniquement", False)
+        self.reel_uniquement = conf.get("reel_uniquement", False)
+        self.reel_confirme = conf.get("reel_confirme", False)
 
     # ---------- connexion ----------
     def connecter(self) -> None:
@@ -28,13 +30,13 @@ class Courtier:
             params["path"] = self.chemin
         if not mt5.initialize(**params):
             raise ConnectionError(f"{self.nom} : connexion impossible {mt5.last_error()}")
-        if self.demo_uniquement:
+        if self.demo_uniquement or self.reel_uniquement:
             compte = self.infos_compte()
             if (compte is None or compte.login != self.login
                     or compte.server.casefold() != self.serveur.casefold()
-                    or compte.trade_mode != mt5.ACCOUNT_TRADE_MODE_DEMO):
+                    or not self.type_compte_valide(compte)):
                 self.deconnecter()
-                raise ConnectionError("MT5 n'a pas confirmé le compte démo configuré.")
+                raise ConnectionError("MT5 n'a pas confirmé le type et l'identité du compte configuré.")
         log.info("%s connecté (serveur %s)", self.nom, self.serveur)
 
     def deconnecter(self) -> None:
@@ -45,6 +47,16 @@ class Courtier:
         return (compte is None or getattr(compte, "trade_mode", None)
                 != mt5.ACCOUNT_TRADE_MODE_DEMO)
 
+    def type_compte_valide(self, compte) -> bool:
+        if self.demo_uniquement:
+            return compte.trade_mode == mt5.ACCOUNT_TRADE_MODE_DEMO
+        if self.reel_uniquement:
+            return compte.trade_mode == mt5.ACCOUNT_TRADE_MODE_REAL
+        return True
+
+    def reel_autorise(self) -> bool:
+        return self.reel_confirme or os.getenv("COMPTE_REEL_CONFIRME", "").strip().lower() == "oui"
+
     def verifier_envoi(self) -> None:
         compte = self.infos_compte()
         if (compte is None or not self.login or compte.login != self.login
@@ -52,10 +64,9 @@ class Courtier:
             raise RuntimeError("Compte MT5 actif différent du compte configuré.")
         if C.MODE != "ORDRES":
             raise RuntimeError("MODE=ORDRES est requis pour envoyer un ordre.")
-        if self.demo_uniquement and compte.trade_mode != mt5.ACCOUNT_TRADE_MODE_DEMO:
-            raise RuntimeError("Le profil démo ne peut envoyer d'ordre sur un compte réel.")
-        if (compte.trade_mode != mt5.ACCOUNT_TRADE_MODE_DEMO
-                and os.getenv("COMPTE_REEL_CONFIRME", "").strip().lower() != "oui"):
+        if not self.type_compte_valide(compte):
+            raise RuntimeError("Le compte MT5 ne correspond plus au mode sélectionné.")
+        if compte.trade_mode != mt5.ACCOUNT_TRADE_MODE_DEMO and not self.reel_autorise():
             raise RuntimeError("La confirmation du compte réel est requise.")
 
     def positions_symbole(self, symbole: str) -> list:
