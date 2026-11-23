@@ -39,7 +39,17 @@ Depuis PowerShell, lance `powershell -NoProfile -ExecutionPolicy Bypass -File .\
 
 La tâche lit le fichier `.env`. Pour le réel, active `HFM_ACTIF=oui`, `EXNESS_ACTIF=non`, `CLAUDE_ACTIF=oui`, `MODE=ORDRES` et `COMPTE_REEL_CONFIRME=oui`, puis redémarre la tâche après un changement. Le mode par défaut reste `TEST`. Quand la tâche tourne, utilise l'interface pour l'observer et évite de lancer `robot.py` en parallèle.
 
-`Ouvrir_Trading.vbs` affiche le compagnon animé et le résultat net du jour UTC des opérations identifiées comme celles du robot par MT5. Les rapports locaux sont conservés dans `rapports_automatiques`. Pour arrêter et retirer la tâche, relance l'installateur avec `-Desinstaller`. Les positions déjà ouvertes restent chez HFM et demeurent visibles dans MT5.
+Le tableau animé Nkap est accessible à `http://127.0.0.1:8765` depuis le navigateur de la machine où tourne la tâche. Il affiche les positions, l'activité récente et les résultats du jour et de la semaine des opérations identifiées comme celles du robot par MT5. `Ouvrir_Trading.vbs` conserve le tableau Windows. Les nouvelles entrées automatiques sont possibles du lundi au vendredi, de 09 h 15 à 21 h par défaut, heure de Douala. Ajuste `HEURE_EXECUTION` et `HEURE_LIMITE` dans `.env` si nécessaire. Les règles de clôture continuent d'être évaluées hors de cette fenêtre.
+
+Les rapports locaux sont conservés dans `rapports_automatiques`. Pour les recevoir sur Telegram, crée un bot avec @BotFather, mets son jeton dans `TELEGRAM_TOKEN` dans `.env`, envoie un message au bot et lance `python notifications.py` pour retrouver ton `TELEGRAM_CHAT_ID`. Relance la tâche après configuration. Les alertes couvrent les exécutions MT5 identifiées, avec un bilan le soir en semaine et le samedi à partir de 10 h, heure de Douala. Le rapport est calculé dans la devise du compte.
+
+Relance l'installateur avec `-Statut` pour lire le dernier rapport et l'état de la tâche, avec `-Pause` pour désactiver et arrêter la tâche, ou avec `-Desinstaller` pour la retirer. Le lancement de l'installateur sans argument la réactive. Les positions déjà ouvertes restent chez HFM et demeurent visibles dans MT5.
+
+### Déplacer le robot vers OVHcloud
+
+Choisis une offre x64 permettant d'installer **Windows** et d'accéder en Bureau à distance. Vérifie auprès d'OVHcloud que l'offre choisie inclut ou permet une licence Windows compatible. Installe le terminal HFM MT5, Git, Python 3.11 et les dépendances sur le VPS. Clone dans un dossier local, par exemple `C:\Trading`, recrée `.venv`, configure ton `.env` localement et mets à jour `HFM_CHEMIN` avec le chemin du terminal sur le VPS.
+
+Avant de basculer le même compte, mets l'ancienne tâche en pause. Copie `automatique.sqlite3`, `etat.json` s'il existe et tes rapports locaux pendant l'arrêt pour conserver les passages déjà effectués, les alertes déjà envoyées et l'état de risque. Exécute d'abord `tester_api.py` puis la tâche en `MODE=TEST`. Déconnecte la fenêtre RDP sans fermer la session Windows, reconnecte-toi un peu plus tard et vérifie avec `Installer_Automatique.ps1 -Statut` que le rapport a avancé. Après un redémarrage du VPS, ouvre la session Windows pour relancer la tâche. Deux ou trois jours permettent de vérifier la continuité du service, les reconnexions et les alertes, même si aucun signal ne débouche sur un ordre.
 
 ### Afficher les décisions dans MetaTrader 5
 

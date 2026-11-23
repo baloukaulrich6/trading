@@ -188,6 +188,9 @@ def traiter_courtier(conf: dict, planificateur=None) -> None:
             if bloque or nb_positions >= C.MAX_POSITIONS:
                 publier(c.login, symbole, motif_arret if bloque else "Limite de positions atteinte")
                 continue
+            if planificateur is not None and not planificateur.entrees_permises():
+                publier(c.login, symbole, "En attente de la fenêtre d'entrée (heure de Douala)")
+                continue
             publier(c.login, symbole, f"Clôture {ligne['close']} · {ligne['regime']} · RSI {ligne['rsi']:.1f}")
             if chercher_entree(c, symbole, ligne, capital, envoyer, motif, planificateur):
                 nb_positions += 1

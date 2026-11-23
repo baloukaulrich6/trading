@@ -1,7 +1,27 @@
-param([switch]$Desinstaller)
+param([switch]$Desinstaller, [switch]$Statut, [switch]$Pause)
 
 $ErrorActionPreference = "Stop"
 $nom = "Trading MT5 - surveillance D1"
+
+if ($Statut) {
+    Get-ScheduledTask -TaskName $nom | Select-Object TaskName, State
+    Get-ScheduledTaskInfo -TaskName $nom | Select-Object LastRunTime, LastTaskResult
+    $fichierEtat = Join-Path $PSScriptRoot "automatique_etat.json"
+    if (Test-Path -LiteralPath $fichierEtat) {
+        $etat = Get-Content -LiteralPath $fichierEtat -Raw -Encoding UTF8 | ConvertFrom-Json
+        $age = ([DateTimeOffset]::UtcNow - [DateTimeOffset]::Parse($etat.heure)).TotalSeconds
+        $etat | Select-Object mode, statut, heure, @{Name="AgeSecondes"; Expression={[Math]::Round($age)}}
+    } else {
+        Write-Host "Aucun rapport encore publie."
+    }
+    exit
+}
+
+if ($Pause) {
+    Disable-ScheduledTask -TaskName $nom | Out-Null
+    Stop-ScheduledTask -TaskName $nom
+    exit
+}
 
 if ($Desinstaller) {
     Stop-ScheduledTask -TaskName $nom -ErrorAction SilentlyContinue

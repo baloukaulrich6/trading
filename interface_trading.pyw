@@ -41,8 +41,10 @@ class Compagnon(ttk.Frame):
             for rapport in etat["rapports"]:
                 net = rapport["resultat"]
                 resultat = f"{net:+.2f} {rapport['devise']}" if net is not None else "indisponible"
+                semaine = rapport.get("resultat_semaine")
+                hebdo = f"{semaine:+.2f} {rapport['devise']}" if semaine is not None else "indisponible"
                 lignes.append(f"{rapport['courtier']}  |  {rapport['positions']} position(s) du robot"
-                              f"  |  Net du jour UTC : {resultat}")
+                              f"  |  Jour : {resultat}  |  Semaine : {hebdo}")
             self.texte.set("\n".join(lignes))
         except (OSError, ValueError, KeyError):
             self.actif = False
