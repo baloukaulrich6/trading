@@ -2,6 +2,7 @@
 import csv
 import json
 import logging
+from math import isfinite
 import os
 import sqlite3
 from collections import deque
@@ -24,7 +25,7 @@ from univers_marches import marches
 
 BASE = Path(__file__).resolve().parent
 ETAT = BASE / "automatique_etat.json"
-INTERVALLE = 60
+INTERVALLE = 15
 
 
 def activite():
@@ -36,6 +37,8 @@ def activite():
     types = {"entrée": "trade", "sortie": "sortie", "veto": "veto", "refus taille": "signal"}
     return [
         {"heure": ligne.get("date_utc", ""), "courtier": ligne.get("courtier", ""),
+         "symbole": ligne.get("symbole", ""), "mode": ligne.get("mode", ""),
+         "action": ligne.get("action", ""), "resultat": ligne.get("resultat", ""),
          "type": types.get(ligne.get("action"), "info"),
          "titre": f"{ligne.get('symbole', '')} · {ligne.get('action', '')} · {ligne.get('resultat', '')}",
          "detail": ligne.get("raison", "")}
@@ -96,18 +99,25 @@ class Planificateur:
             return None
         return self.suivi_objectif.verifier(courtier, compte)
 
-    def noter_marche(self, courtier, base, symbole, ligne, *, fantome=False):
+    def noter_marche(self, courtier, base, symbole, ligne, *, fantome=False, donnees=None):
         signal = robot.S.signal_entree(ligne) if ligne is not None else None
+        bougies = []
+        if donnees is not None:
+            series = donnees[["open", "high", "low", "close"]].tail(60)
+            for date, *prix in series.itertuples(name=None):
+                if all(isfinite(p) and p > 0 for p in prix):
+                    bougies.append([date.strftime("%Y-%m-%d"), *map(float, prix)])
         self.marches[(courtier.nom, courtier.login, base)] = {
             "courtier": courtier.nom, "marche": base, "symbole": symbole,
             "bougie": ligne.name.isoformat() if ligne is not None else None,
+            "bougies": bougies,
             "statut": (signal["sens"] if signal else "Aucun signal D1") if ligne is not None
             else "Observation fantôme" if fantome else "Symbole indisponible",
         }
 
     def nouveau(self, courtier, symbole, bougie, solde, positions):
         cle = (courtier.serveur.casefold(), courtier.login, symbole)
-        observation = (bougie, solde, tuple(p.ticket for p in positions), self.entrees_permises())
+        observation = (bougie, solde, tuple(p.ticket for p in positions), C.MODE, self.entrees_permises())
         precedent = self.observations.get(cle)
         self.observations[cle] = observation
         return observation != precedent
@@ -131,13 +141,24 @@ class Planificateur:
             mt5.history_deals_get(rapport.debut_semaine(maintenant), fin), C.MAGIC
         )
         positions = courtier.positions()
+        releves = []
+        for base in marches(courtier.nom):
+            marche = self.marches.get((courtier.nom, courtier.login, base),
+                                      {"courtier": courtier.nom, "marche": base, "statut": "Analyse en attente"})
+            symbole = marche.get("symbole")
+            tick = mt5.symbol_info_tick(symbole) if symbole else None
+            if tick is not None and all(isfinite(p) and p > 0 for p in (tick.bid, tick.ask)):
+                marche = {**marche, "bid": tick.bid, "ask": tick.ask, "tick_utc": getattr(tick, "time", None)}
+            releves.append(marche)
         self.rapports.append({
             "courtier": courtier.nom,
             "devise": compte.currency,
             "capital": compte.equity,
+            "solde": getattr(compte, "balance", None),
+            "marge_libre": getattr(compte, "margin_free", None),
             "positions": len(positions),
             "positions_detail": [
-                {"symbole": p.symbol, "sens": "achat" if p.type == mt5.POSITION_TYPE_BUY else "vente",
+                {"ticket": p.ticket, "symbole": p.symbol, "sens": "achat" if p.type == mt5.POSITION_TYPE_BUY else "vente",
                  "volume": p.volume, "prix": p.price_open, "stop": p.sl, "resultat": p.profit + p.swap}
                 for p in positions
             ],
@@ -150,11 +171,7 @@ class Planificateur:
             "resultat_semaine": semaine,
             "transactions_semaine": nombre_semaine,
             "objectif": self.objectif_compte(courtier, compte),
-            "marches": [
-                self.marches.get((courtier.nom, courtier.login, base),
-                                 {"courtier": courtier.nom, "marche": base, "statut": "Analyse en attente"})
-                for base in marches(courtier.nom)
-            ],
+            "marches": releves,
         })
         if not notifications.active():
             return

@@ -168,8 +168,9 @@ def traiter_courtier(conf: dict, planificateur=None) -> None:
 
             if planificateur is not None:
                 if planificateur.fantome is not None and C.MODE == "TEST":
-                    planificateur.observer(c, base, c.bougies(symbole, 400))
-                    planificateur.noter_marche(c, base, symbole, None, fantome=True)
+                    bougies_fantome = c.bougies(symbole, 400)
+                    planificateur.observer(c, base, bougies_fantome)
+                    planificateur.noter_marche(c, base, symbole, None, fantome=True, donnees=bougies_fantome)
                     continue
                 bougie = c.bougies(symbole, 1).index[-1]
                 positions = c.positions(symbole)
@@ -183,7 +184,7 @@ def traiter_courtier(conf: dict, planificateur=None) -> None:
             if planificateur is not None and ligne.name != bougie:
                 continue
             if planificateur is not None:
-                planificateur.noter_marche(c, base, symbole, ligne)
+                planificateur.noter_marche(c, base, symbole, ligne, donnees=donnees)
             log.info("%s %s : clôture %s, régime %s (EBSW %.2f), RSI %.1f", c.nom, symbole,
                      ligne["close"], ligne["regime"], ligne["ebsw"], ligne["rsi"])
 
@@ -219,7 +220,7 @@ def traiter_courtier(conf: dict, planificateur=None) -> None:
             if chercher_entree(c, symbole, ligne, capital, envoyer, motif, planificateur):
                 nb_positions += 1
         if planificateur is not None:
-            planificateur.relever(c, compte)
+            planificateur.relever(c, c.infos_compte() or compte)
     finally:
         c.deconnecter()
 
