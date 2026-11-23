@@ -475,6 +475,10 @@ body.mode-demo .demo{display:block}
       <h2 id="t-positions">Positions ouvertes</h2>
       <div id="positions"></div>
     </section>
+    <section class="panneau" aria-labelledby="t-marches">
+      <h2 id="t-marches">Marchés surveillés</h2>
+      <ul id="marches"></ul>
+    </section>
     <section class="panneau" id="fantome" aria-labelledby="t-fantome" hidden>
       <h2 id="t-fantome">Observations sur le marché</h2>
       <p>Signaux D1 des deux versions, en mode fantôme.</p>
@@ -552,6 +556,14 @@ body.mode-demo .demo{display:block}
   let prochainReveil = null;
 
   function afficher(etat) {
+    const marches = etat.marches || [];
+    $("marches").replaceChildren(...(marches.length ? marches : [{statut: "En attente du premier relevé"}])
+      .map((marche) => {
+        const element = document.createElement("li");
+        element.textContent = [marche.symbole || marche.marche,
+          marche.courtier, marche.statut, marche.bougie?.slice(0, 10)].filter(Boolean).join(" · ");
+        return element;
+      }));
     $("fantome").hidden = !Array.isArray(etat.fantome);
     $("observations").replaceChildren(...(etat.fantome || []).map((observation) => {
       const element = document.createElement("li");

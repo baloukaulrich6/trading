@@ -13,6 +13,7 @@ import config as C
 from courtier import Courtier
 from nkap.configuration import Parametres, charger_config
 from nkap.service.fantome import Fantome
+from univers_marches import marches
 
 
 def passage(courtier: Courtier, fantome: Fantome, versions: list[Parametres], marches: list[str]) -> int:
@@ -55,7 +56,7 @@ def main() -> int:
         while True:
             nombre = 0
             try:
-                nombre = passage(Courtier(hfm), fantome, [champion, challenger], C.SYMBOLES)
+                nombre = passage(Courtier(hfm), fantome, [champion, challenger], list(marches("HFM")))
             except (OSError, RuntimeError, ValueError) as erreur:
                 print(f"HFM indisponible : {erreur}", flush=True)
             fantome.exporter(args.dossier / "rapport.csv")

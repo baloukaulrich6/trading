@@ -18,6 +18,7 @@ from pilotage_local import Pilotage
 import rapport
 import robot
 import tableau_de_bord
+from univers_marches import marches
 
 BASE = Path(__file__).resolve().parent
 ETAT = BASE / "automatique_etat.json"
@@ -70,6 +71,7 @@ class Planificateur:
             connexion.execute("CREATE TABLE IF NOT EXISTS messages (cle TEXT PRIMARY KEY)")
         self.rapports = []
         self.observations = {}
+        self.marches = {}
         self.demarrage_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
         self.observations_fantomes = []
         self.fantome = None
@@ -102,6 +104,15 @@ class Planificateur:
 
     def entrees_permises(self):
         return fenetre_entree(datetime.now(timezone.utc))
+
+    def noter_marche(self, courtier, base, symbole, ligne, *, fantome=False):
+        signal = robot.S.signal_entree(ligne) if ligne is not None else None
+        self.marches[(courtier.nom, courtier.login, base)] = {
+            "courtier": courtier.nom, "marche": base, "symbole": symbole,
+            "bougie": ligne.name.isoformat() if ligne is not None else None,
+            "statut": (signal["sens"] if signal else "Aucun signal D1") if ligne is not None
+            else "Observation fantôme" if fantome else "Symbole indisponible",
+        }
 
     def nouveau(self, courtier, symbole, bougie, solde, positions):
         cle = (courtier.serveur.casefold(), courtier.login, symbole)
@@ -147,6 +158,11 @@ class Planificateur:
             "transactions": nombre,
             "resultat_semaine": semaine,
             "transactions_semaine": nombre_semaine,
+            "marches": [
+                self.marches.get((courtier.nom, courtier.login, base),
+                                 {"courtier": courtier.nom, "marche": base, "statut": "Analyse en attente"})
+                for base in marches(courtier.nom)
+            ],
         })
         if not notifications.active():
             return
@@ -208,6 +224,7 @@ class Planificateur:
                 for r in self.rapports
             },
             "evenements": activite(),
+            "marches": [m for r in self.rapports for m in r["marches"]],
             "fantome": self.observations_fantomes if self.fantome is not None and C.MODE == "TEST" else None,
         }, ensure_ascii=False)
         if self.fantome is not None:

@@ -13,6 +13,7 @@ import config as C
 import risque as R
 import strategie as S
 from courtier import Courtier
+from univers_marches import marches
 from suivi_mt5 import publier
 from veto_claude import demander_veto
 
@@ -146,15 +147,18 @@ def traiter_courtier(conf: dict, planificateur=None) -> None:
             log.warning("%s : nouveaux trades bloqués (%s)", c.nom, motif_arret)
         nb_positions = len(c.positions())
 
-        for base in C.SYMBOLES:
+        for base in marches(c.nom):
             symbole = c.trouver_symbole(base)
             if symbole is None:
                 log.warning("%s : symbole %s introuvable", c.nom, base)
+                if planificateur is not None:
+                    planificateur.noter_marche(c, base, None, None)
                 continue
 
             if planificateur is not None:
                 if planificateur.fantome is not None and C.MODE == "TEST":
                     planificateur.observer(c, base, c.bougies(symbole, 400))
+                    planificateur.noter_marche(c, base, symbole, None, fantome=True)
                     continue
                 bougie = c.bougies(symbole, 1).index[-1]
                 positions = c.positions(symbole)
@@ -167,6 +171,8 @@ def traiter_courtier(conf: dict, planificateur=None) -> None:
             ligne = donnees.iloc[-1]
             if planificateur is not None and ligne.name != bougie:
                 continue
+            if planificateur is not None:
+                planificateur.noter_marche(c, base, symbole, ligne)
             log.info("%s %s : clôture %s, régime %s (EBSW %.2f), RSI %.1f", c.nom, symbole,
                      ligne["close"], ligne["regime"], ligne["ebsw"], ligne["rsi"])
 

@@ -6,6 +6,7 @@ Aucun ordre n'est envoyé.
 import config as C
 import strategie as S
 from courtier import Courtier
+from univers_marches import marches
 
 
 def verifier(conf: dict) -> None:
@@ -20,7 +21,7 @@ def verifier(conf: dict) -> None:
         print(f"Marge libre {compte.margin_free:.2f} {compte.currency} | "
               f"Budget au stop {compte.equity * C.RISQUE_PAR_TRADE:.2f} {compte.currency}")
 
-        for base in C.SYMBOLES:
+        for base in marches(c.nom):
             symbole = c.trouver_symbole(base)
             if symbole is None:
                 print(f"- {base} : introuvable chez ce courtier")

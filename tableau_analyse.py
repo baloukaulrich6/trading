@@ -9,6 +9,7 @@ import config as C
 import risque as R
 import strategie as S
 from courtier import Courtier
+from univers_marches import marches
 
 
 STYLE = """
@@ -102,7 +103,7 @@ def relever_courtier(conf, scenarios):
         if facteur is None:
             resume += " · Simulation USD indisponible pour cette devise."
         lignes = []
-        for base in C.SYMBOLES:
+        for base in marches(courtier.nom):
             try:
                 lignes.append(analyser_marche(courtier, base, facteur, scenarios))
             except (RuntimeError, ValueError) as erreur:
