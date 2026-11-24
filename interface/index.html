@@ -305,15 +305,15 @@ function montrerCompte() {
   }
   const table = noeud("table", "", "chiffres");
   const titres = table.createTHead().insertRow();
-  ["Marché / ticket", "Sens", "Lots", "Entrée", "Stop", "Latent"].forEach((titre) => titres.append(noeud("th", titre)));
+  ["Marché / ticket", "Sens", "Lots", "Entrée", "Stop", "Objectif (TP)", "Latent"].forEach((titre) => titres.append(noeud("th", titre)));
   const corps = table.createTBody();
   for (const p of positions) {
     const ligne = corps.insertRow();
     [p.symbole + (p.ticket != null ? " #" + p.ticket : ""), p.sens, p.volume,
-      prix(p.prix), p.stop > 0 ? prix(p.stop) : "—", gain(p.resultat, devise)].forEach((v, i) => {
+      prix(p.prix), p.stop > 0 ? prix(p.stop) : "—", p.objectif > 0 ? prix(p.objectif) : "—", gain(p.resultat, devise)].forEach((v, i) => {
       const cellule = ligne.insertCell();
       cellule.textContent = v ?? "—";
-      if (i === 5) cellule.className = p.resultat > 0 ? "positif" : p.resultat < 0 ? "negatif" : "";
+      if (i === 6) cellule.className = p.resultat > 0 ? "positif" : p.resultat < 0 ? "negatif" : "";
     });
   }
   bloc.replaceChildren(table);

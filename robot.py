@@ -135,7 +135,20 @@ def traiter_courtier(conf: dict, planificateur=None) -> None:
         objectif = planificateur.objectif_compte(c, compte) if planificateur is not None else None
         if objectif and objectif["bloque"]:
             log.info("%s : %s", c.nom, objectif["motif"])
-        nb_positions = len(c.positions())
+        positions_robot = c.positions()
+        nb_positions = len(positions_robot)
+        if envoyer:
+            for position in positions_robot:
+                if getattr(position, "tp", 0) > 0:
+                    continue
+                bilan = c.proteger_objectif(position)
+                if bilan is None:
+                    continue
+                ok, detail = bilan
+                log.info("%s %s : %s", c.nom, position.symbol, detail)
+                journaliser(courtier=c.nom, symbole=position.symbol, action="take profit",
+                            resultat="ok" if ok else "non envoyé", raison=detail)
+            nb_positions = len(c.positions())
 
         for base in marches(c.nom):
             symbole = c.trouver_symbole(base)

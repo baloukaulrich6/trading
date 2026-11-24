@@ -170,7 +170,8 @@ class Planificateur:
             "positions": len(positions),
             "positions_detail": [
                 {"ticket": p.ticket, "symbole": p.symbol, "sens": "achat" if p.type == mt5.POSITION_TYPE_BUY else "vente",
-                 "volume": p.volume, "prix": p.price_open, "stop": p.sl, "resultat": p.profit + p.swap}
+                 "volume": p.volume, "prix": p.price_open, "stop": p.sl, "objectif": getattr(p, "tp", 0),
+                 "resultat": p.profit + p.swap}
                 for p in positions
             ],
             "serveur": courtier.serveur,

@@ -168,10 +168,38 @@ def test_securite_ordres():
         faux.ENVOIS.clear()
         robot.traiter_courtier(C.COURTIERS[0])
         assert faux.ENVOIS, "compte démo en mode ORDRES : les ordres doivent partir"
+        for demande in faux.ENVOIS:
+            assert demande["sl"] < demande["price"] < demande["tp"]
     finally:
         S.signal_entree = S_original
         C.MODE = "TEST"
     print("OK sécurité des ordres (TEST, compte réel bloqué, démo autorisée)")
+
+
+def test_objectif_position_existante():
+    from unittest.mock import patch
+
+    courtier = robot.Courtier(C.COURTIERS[0])
+    position = types.SimpleNamespace(symbol="EURUSDm", ticket=321, magic=C.MAGIC,
+                                     type=1, price_open=1.30469, sl=1.31940, tp=0, volume=0.03)
+    with patch.object(C, "MODE", "ORDRES"), patch.dict(os.environ, {"NKAP_TP_MULTIPLE_R": "1"}):
+        courtier.connecter()
+        with patch.object(faux, "positions_get", return_value=[position]), \
+             patch.object(faux, "TRADE_ACTION_SLTP", 6, create=True), \
+             patch.object(faux, "order_send", return_value=types.SimpleNamespace(retcode=10009)) as envoi, \
+             patch.object(courtier, "prix_actuel", return_value=1.30522) as cotation:
+            assert courtier.proteger_objectif(position)[0]
+            demande = envoi.call_args.args[0]
+            assert demande == {"action": 6, "symbol": "EURUSDm", "position": 321,
+                               "sl": 1.31940, "tp": 1.28998}
+            cotation.assert_called_once_with("EURUSDm", "achat")
+            cotation.return_value = 1.28997
+            with patch.object(courtier, "fermer", return_value=(True, "fermé")) as fermer:
+                assert courtier.proteger_objectif(position)[0]
+                fermer.assert_called_once_with(position)
+            position.tp = 1.28
+            assert courtier.proteger_objectif(position) is None
+            assert envoi.call_count == 1
 
 
 if __name__ == "__main__":
@@ -180,4 +208,5 @@ if __name__ == "__main__":
     test_veto()
     test_backtest()
     test_securite_ordres()
+    test_objectif_position_existante()
     print("\nTous les tests sont passés.")

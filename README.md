@@ -59,6 +59,8 @@ Sur un compte HFM en USC, ouvre les graphiques des symboles Cent, par exemple `X
 
 Le robot effectue un passage par lancement sur les dernières bougies D1 clôturées. En `MODE=ORDRES`, vérifie dans **Outils → Options → Expert Advisors** que le trading algorithmique est autorisé, y compris via l'API Python. Le passage sur un compte non-démo exige également `COMPTE_REEL_CONFIRME=oui`. Le solde, le volume minimal, la marge et les règles du courtier peuvent empêcher l'exécution d'un ordre.
 
+Chaque nouvelle position est envoyée avec un stop et un take profit côté MT5. Par défaut, le TP est à 1R, soit la même distance que le stop. Le réglage `NKAP_TP_MULTIPLE_R` dans `.env` fixe ce multiple. En mode ordres, Nkap équipe aussi ses propres positions ouvertes sans TP quand leur stop permet de calculer la cible. Si la cotation de sortie a déjà franchi la cible au moment du relevé, il demande la clôture au marché. Les signaux d'entrée et les sorties de stratégie restent basés sur D1.
+
 Le passage réel suit les signaux, les contrôles de risque et les règles MT5. La revue Claude démarre en arrière-plan au premier relevé disponible de la journée si `CLAUDE_ACTIF=oui` et si une clé API est présente. Elle analyse le journal et les exécutions passées et affiche des propositions à tester. La revue ne modifie pas le code, les positions ni les paramètres d'exécution.
 
 ## Fichiers
