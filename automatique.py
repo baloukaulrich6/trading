@@ -280,7 +280,15 @@ def main():
     pilotage = None
     if os.getenv("NKAP_CHOIX_MODE", "non").strip().lower() == "oui":
         pilotage = Pilotage(next((c for c in C.COURTIERS if c["nom"] == "HFM" and c["actif"]), None))
-        C.MODE = "TEST"
+        reel_au_demarrage = C.MODE == "ORDRES" and os.getenv(
+            "COMPTE_REEL_CONFIRME", ""
+        ).strip().lower() == "oui"
+        if reel_au_demarrage:
+            code, motif = pilotage.demander("REEL", confirmer_reel=True)
+            if code != 200:
+                raise ValueError(motif)
+        else:
+            C.MODE = "TEST"
     tableau_de_bord.PILOTAGE = pilotage
     planificateur = Planificateur()
     port = int(os.getenv("PORT_INTERFACE", "8765"))

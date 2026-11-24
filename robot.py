@@ -158,20 +158,26 @@ def traiter_courtier(conf: dict, planificateur=None) -> None:
                     planificateur.noter_marche(c, base, None, None)
                 continue
 
-            if planificateur is not None:
-                if planificateur.fantome is not None and C.MODE == "TEST":
-                    bougies_fantome = c.bougies(symbole, 400)
-                    planificateur.observer(c, base, bougies_fantome)
-                    planificateur.noter_marche(c, base, symbole, None, fantome=True, donnees=bougies_fantome)
-                    continue
-                bougie = c.bougies(symbole, 1).index[-1]
-                positions = c.positions(symbole)
-                if C.MODE == "ORDRES" and capital <= 0 and not positions:
-                    publier(c.login, symbole, "En attente de fonds")
-                    continue
-                if not planificateur.nouveau(c, symbole, bougie, compte.balance, positions):
-                    continue
-            donnees = S.preparer(c.bougies(symbole, 400))
+            try:
+                if planificateur is not None:
+                    if planificateur.fantome is not None and C.MODE == "TEST":
+                        bougies_fantome = c.bougies(symbole, 400)
+                        planificateur.observer(c, base, bougies_fantome)
+                        planificateur.noter_marche(c, base, symbole, None, fantome=True, donnees=bougies_fantome)
+                        continue
+                    bougie = c.bougies(symbole, 1).index[-1]
+                    positions = c.positions(symbole)
+                    if C.MODE == "ORDRES" and capital <= 0 and not positions:
+                        publier(c.login, symbole, "En attente de fonds")
+                        continue
+                    if not planificateur.nouveau(c, symbole, bougie, compte.balance, positions):
+                        continue
+                donnees = S.preparer(c.bougies(symbole, 400))
+            except ValueError as erreur:
+                log.warning("%s %s : analyse indisponible (%s)", c.nom, symbole, erreur)
+                if planificateur is not None:
+                    planificateur.noter_marche(c, base, symbole, None)
+                continue
             ligne = donnees.iloc[-1]
             if planificateur is not None and ligne.name != bougie:
                 continue

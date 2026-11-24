@@ -10,9 +10,12 @@ def _oui(nom, defaut="non"):
     return os.getenv(nom, defaut).strip().lower() in ("oui", "yes", "true", "1")
 
 
-# TEST : le robot calcule les signaux et demande le veto, mais n'envoie aucun ordre.
-# ORDRES : le robot envoie les ordres (sur un compte DÉMO pendant au moins 3 mois).
+# TEST : observation. ORDRES : exécution, soumise à la confirmation du compte réel.
 MODE = os.getenv("MODE", "TEST").strip().upper()
+if MODE in ("LIVE", "REEL", "RÉEL"):
+    MODE = "ORDRES"
+if MODE not in ("TEST", "ORDRES"):
+    raise ValueError("MODE doit être TEST ou ORDRES (LIVE est un alias).")
 
 # Délai maximal de connexion à MetaTrader 5, en millisecondes.
 MT5_TIMEOUT_MS = int(os.getenv("MT5_TIMEOUT_MS", "").strip() or "60000")
