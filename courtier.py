@@ -11,6 +11,22 @@ import config as C
 log = logging.getLogger("robot")
 
 
+def objectif_position(prix: float, stop: float, achat: bool, info) -> float:
+    """Place la cible à un multiple de la distance entre l'entrée et le stop."""
+    multiple = float(os.getenv("NKAP_TP_MULTIPLE_R", "1").strip() or "1")
+    distance = prix - stop if achat else stop - prix
+    pas = getattr(info, "trade_tick_size", 0) or info.point
+    if not all(isfinite(v) and v > 0 for v in (prix, stop, distance, multiple, pas)):
+        raise ValueError("Entrée, stop ou objectif de position invalide.")
+    cible = prix + distance * multiple if achat else prix - distance * multiple
+    if not isfinite(cible):
+        raise ValueError("Objectif de position invalide.")
+    cible = round(round(cible / pas) * pas, info.digits)
+    if cible <= 0 or (cible <= prix if achat else cible >= prix):
+        raise ValueError("Objectif de position invalide après arrondi.")
+    return cible
+
+
 class Courtier:
     def __init__(self, conf: dict):
         self.nom = conf["nom"]
@@ -18,6 +34,9 @@ class Courtier:
         self.mot_de_passe = conf["mot_de_passe"]
         self.serveur = conf["serveur"]
         self.chemin = conf["chemin"]
+        self.demo_uniquement = conf.get("demo_uniquement", False)
+        self.reel_uniquement = conf.get("reel_uniquement", False)
+        self.reel_confirme = conf.get("reel_confirme", False)
 
     # ---------- connexion ----------
     def connecter(self) -> None:
@@ -27,6 +46,13 @@ class Courtier:
             params["path"] = self.chemin
         if not mt5.initialize(**params):
             raise ConnectionError(f"{self.nom} : connexion impossible {mt5.last_error()}")
+        if self.demo_uniquement or self.reel_uniquement:
+            compte = self.infos_compte()
+            if (compte is None or compte.login != self.login
+                    or compte.server.casefold() != self.serveur.casefold()
+                    or not self.type_compte_valide(compte)):
+                self.deconnecter()
+                raise ConnectionError("MT5 n'a pas confirmé le type et l'identité du compte configuré.")
         log.info("%s connecté (serveur %s)", self.nom, self.serveur)
 
     def deconnecter(self) -> None:
@@ -37,6 +63,16 @@ class Courtier:
         return (compte is None or getattr(compte, "trade_mode", None)
                 != mt5.ACCOUNT_TRADE_MODE_DEMO)
 
+    def type_compte_valide(self, compte) -> bool:
+        if self.demo_uniquement:
+            return compte.trade_mode == mt5.ACCOUNT_TRADE_MODE_DEMO
+        if self.reel_uniquement:
+            return compte.trade_mode == mt5.ACCOUNT_TRADE_MODE_REAL
+        return True
+
+    def reel_autorise(self) -> bool:
+        return self.reel_confirme or os.getenv("COMPTE_REEL_CONFIRME", "").strip().lower() == "oui"
+
     def verifier_envoi(self) -> None:
         compte = self.infos_compte()
         if (compte is None or not self.login or compte.login != self.login
@@ -44,8 +80,9 @@ class Courtier:
             raise RuntimeError("Compte MT5 actif différent du compte configuré.")
         if C.MODE != "ORDRES":
             raise RuntimeError("MODE=ORDRES est requis pour envoyer un ordre.")
-        if (compte.trade_mode != mt5.ACCOUNT_TRADE_MODE_DEMO
-                and os.getenv("COMPTE_REEL_CONFIRME", "").strip().lower() != "oui"):
+        if not self.type_compte_valide(compte):
+            raise RuntimeError("Le compte MT5 ne correspond plus au mode sélectionné.")
+        if compte.trade_mode != mt5.ACCOUNT_TRADE_MODE_DEMO and not self.reel_autorise():
             raise RuntimeError("La confirmation du compte réel est requise.")
 
     def positions_symbole(self, symbole: str) -> list:
@@ -132,6 +169,7 @@ class Courtier:
         compte = self.infos_compte()
         try:
             risque, marge = self.cout_ordre(symbole, sens, volume, prix, stop)
+            cible = objectif_position(prix, stop, sens == "achat", info)
         except ValueError as erreur:
             return False, str(erreur)
         if risque > compte.equity * C.RISQUE_PAR_TRADE:
@@ -145,6 +183,7 @@ class Courtier:
             "type": mt5.ORDER_TYPE_BUY if sens == "achat" else mt5.ORDER_TYPE_SELL,
             "price": prix,
             "sl": stop,
+            "tp": cible,
             "deviation": 20,
             "magic": C.MAGIC,
             "comment": module,
@@ -161,10 +200,44 @@ class Courtier:
         if resultat is None:
             return False, f"order_send a échoué {mt5.last_error()}"
         if resultat.retcode == mt5.TRADE_RETCODE_DONE_PARTIAL:
-            return True, f"ordre {resultat.order} partiellement exécuté"
+            return True, f"ordre {resultat.order} partiellement exécuté · TP demandé {cible}"
         if resultat.retcode != mt5.TRADE_RETCODE_DONE:
             return False, f"refusé (code {resultat.retcode} : {resultat.comment})"
-        return True, f"ordre {resultat.order} exécuté à {resultat.price}"
+        return True, f"ordre {resultat.order} exécuté à {resultat.price} · TP demandé {cible}"
+
+    def proteger_objectif(self, position):
+        self.verifier_envoi()
+        position = next((p for p in self.positions(position.symbol)
+                         if p.ticket == position.ticket), None)
+        if position is None or position.tp > 0:
+            return None
+        achat = position.type == mt5.POSITION_TYPE_BUY
+        info = self.info_symbole(position.symbol)
+        if info is None:
+            return False, "caractéristiques du symbole indisponibles"
+        try:
+            cible = objectif_position(position.price_open, position.sl, achat, info)
+            prix_sortie = self.prix_actuel(position.symbol, "vente" if achat else "achat")
+        except ValueError as erreur:
+            return False, str(erreur)
+        if not isfinite(prix_sortie) or prix_sortie <= 0:
+            return False, "cotation de sortie indisponible"
+        atteint = prix_sortie >= cible if achat else prix_sortie <= cible
+        if atteint:
+            ok, detail = self.fermer(position)
+            return ok, f"Objectif {cible} atteint · {detail}"
+        self.verifier_envoi()
+        resultat = mt5.order_send({
+            "action": mt5.TRADE_ACTION_SLTP,
+            "symbol": position.symbol,
+            "position": position.ticket,
+            "sl": position.sl,
+            "tp": cible,
+        })
+        if resultat is None or resultat.retcode != mt5.TRADE_RETCODE_DONE:
+            code = resultat.retcode if resultat else mt5.last_error()
+            return False, f"TP {cible} refusé par MT5 ({code})"
+        return True, f"TP {cible} enregistré sur le ticket {position.ticket}"
 
     def fermer(self, position):
         self.verifier_envoi()

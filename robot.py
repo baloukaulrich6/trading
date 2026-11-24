@@ -1,6 +1,6 @@
 """Robot principal : à lancer une fois par jour, après la clôture des bougies journalières.
 
-MODE=TEST   : calcule les signaux et le veto, n'envoie aucun ordre.
+MODE=TEST   : calcule les signaux sans envoyer d'ordre.
 MODE=ORDRES : envoie les ordres sur le compte configuré (démo d'abord !).
 """
 import csv
@@ -13,8 +13,8 @@ import config as C
 import risque as R
 import strategie as S
 from courtier import Courtier
+from univers_marches import marches
 from suivi_mt5 import publier
-from veto_claude import demander_veto
 
 log = logging.getLogger("robot")
 
@@ -47,8 +47,8 @@ def journaliser(**champs) -> None:
 def ordres_autorises(c: Courtier) -> tuple[bool, str]:
     if C.MODE != "ORDRES":
         return False, "mode TEST : aucun ordre envoyé"
-    if c.est_compte_reel() and os.getenv("COMPTE_REEL_CONFIRME", "non").lower() != "oui":
-        return False, "compte RÉEL détecté sans COMPTE_REEL_CONFIRME=oui : aucun ordre envoyé"
+    if c.est_compte_reel() and not c.reel_autorise():
+        return False, "compte RÉEL sans confirmation : aucun ordre envoyé"
     return True, "ok"
 
 
@@ -101,28 +101,16 @@ def chercher_entree(c: Courtier, symbole: str, ligne, capital: float, envoyer: b
     if planificateur is not None and not planificateur.reserver(c, symbole, ligne.name):
         return False
 
-    donnees_veto = {
-        "heure_utc": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"),
-        "symbole": symbole, "sens": sens, "module": module, "raison_signal": signal["raison"],
-        "prix": base_journal["prix"], "stop": base_journal["stop"], "volume": volume,
-        "regime": ligne["regime"], "ebsw": round(float(ligne["ebsw"]), 3),
-        "rsi_2j": round(float(ligne["rsi"]), 1),
-    }
-    if envoyer and c.est_compte_reel() and not C.CLAUDE_ACTIF:
-        autorise, raison = False, "Claude doit être activé pour une entrée sur compte réel"
-    else:
-        if C.CLAUDE_ACTIF:
-            publier(c.login, symbole, f"Signal {sens} · Analyse Claude en cours")
-        autorise, raison = demander_veto(donnees_veto)
-    if not autorise:
-        publier(c.login, symbole, f"Claude bloque · {raison}")
-        log.info("%s %s : veto de Claude (%s)", c.nom, symbole, raison)
-        journaliser(**base_journal, volume=volume, action="veto", resultat="bloqué", raison=raison)
-        return False
+    if envoyer and planificateur is not None:
+        objectif = planificateur.objectif_compte(c, c.infos_compte())
+        if objectif and objectif["bloque"]:
+            publier(c.login, symbole, objectif["motif"])
+            journaliser(**base_journal, volume=volume, action="objectif",
+                        resultat="non envoyé", raison=objectif["motif"])
+            return False
 
     ok, detail = c.ouvrir(symbole, sens, volume, stop, module) if envoyer else (False, motif)
-    decision = f"Claude autorise : {raison}" if C.CLAUDE_ACTIF else raison
-    publier(c.login, symbole, f"Signal {sens} · {decision} · {detail}")
+    publier(c.login, symbole, f"Signal {sens} · {detail}")
     log.info("%s %s : entrée %s %s %.2f lot -> %s", c.nom, symbole, module, sens, volume, detail)
     journaliser(**base_journal, volume=volume, action="entrée",
                 resultat="ok" if ok else "non envoyé", raison=f"{signal['raison']} | {detail}")
@@ -140,29 +128,61 @@ def traiter_courtier(conf: dict, planificateur=None) -> None:
 
         envoyer, motif = ordres_autorises(c)
         analyse_seule = C.MODE == "TEST" and capital <= 0
-        bloque, motif_arret = R.arret_urgence(c.nom, capital)
+        cle_risque = f"{c.nom}-DEMO:{c.login}" if c.demo_uniquement else c.nom
+        bloque, motif_arret = R.arret_urgence(cle_risque, capital)
         if bloque:
             log.warning("%s : nouveaux trades bloqués (%s)", c.nom, motif_arret)
-        nb_positions = len(c.positions())
+        objectif = planificateur.objectif_compte(c, compte) if planificateur is not None else None
+        if objectif and objectif["bloque"]:
+            log.info("%s : %s", c.nom, objectif["motif"])
+        positions_robot = c.positions()
+        nb_positions = len(positions_robot)
+        if envoyer:
+            for position in positions_robot:
+                if getattr(position, "tp", 0) > 0:
+                    continue
+                bilan = c.proteger_objectif(position)
+                if bilan is None:
+                    continue
+                ok, detail = bilan
+                log.info("%s %s : %s", c.nom, position.symbol, detail)
+                journaliser(courtier=c.nom, symbole=position.symbol, action="take profit",
+                            resultat="ok" if ok else "non envoyé", raison=detail)
+            nb_positions = len(c.positions())
 
-        for base in C.SYMBOLES:
+        for base in marches(c.nom):
             symbole = c.trouver_symbole(base)
             if symbole is None:
                 log.warning("%s : symbole %s introuvable", c.nom, base)
+                if planificateur is not None:
+                    planificateur.noter_marche(c, base, None, None)
                 continue
 
-            if planificateur is not None:
-                bougie = c.bougies(symbole, 1).index[-1]
-                positions = c.positions(symbole)
-                if C.MODE == "ORDRES" and capital <= 0 and not positions:
-                    publier(c.login, symbole, "En attente de fonds")
-                    continue
-                if not planificateur.nouveau(c, symbole, bougie, compte.balance, positions):
-                    continue
-            donnees = S.preparer(c.bougies(symbole, 400))
+            try:
+                if planificateur is not None:
+                    if planificateur.fantome is not None and C.MODE == "TEST":
+                        bougies_fantome = c.bougies(symbole, 400)
+                        planificateur.observer(c, base, bougies_fantome)
+                        planificateur.noter_marche(c, base, symbole, None, fantome=True, donnees=bougies_fantome)
+                        continue
+                    bougie = c.bougies(symbole, 1).index[-1]
+                    positions = c.positions(symbole)
+                    if C.MODE == "ORDRES" and capital <= 0 and not positions:
+                        publier(c.login, symbole, "En attente de fonds")
+                        continue
+                    if not planificateur.nouveau(c, symbole, bougie, compte.balance, positions):
+                        continue
+                donnees = S.preparer(c.bougies(symbole, 400))
+            except ValueError as erreur:
+                log.warning("%s %s : analyse indisponible (%s)", c.nom, symbole, erreur)
+                if planificateur is not None:
+                    planificateur.noter_marche(c, base, symbole, None)
+                continue
             ligne = donnees.iloc[-1]
             if planificateur is not None and ligne.name != bougie:
                 continue
+            if planificateur is not None:
+                planificateur.noter_marche(c, base, symbole, ligne, donnees=donnees)
             log.info("%s %s : clôture %s, régime %s (EBSW %.2f), RSI %.1f", c.nom, symbole,
                      ligne["close"], ligne["regime"], ligne["ebsw"], ligne["rsi"])
 
@@ -188,6 +208,9 @@ def traiter_courtier(conf: dict, planificateur=None) -> None:
             if bloque or nb_positions >= C.MAX_POSITIONS:
                 publier(c.login, symbole, motif_arret if bloque else "Limite de positions atteinte")
                 continue
+            if objectif and objectif["bloque"]:
+                publier(c.login, symbole, objectif["motif"])
+                continue
             if planificateur is not None and not planificateur.entrees_permises():
                 publier(c.login, symbole, "En attente de la fenêtre d'entrée (heure de Douala)")
                 continue
@@ -195,7 +218,7 @@ def traiter_courtier(conf: dict, planificateur=None) -> None:
             if chercher_entree(c, symbole, ligne, capital, envoyer, motif, planificateur):
                 nb_positions += 1
         if planificateur is not None:
-            planificateur.relever(c, compte)
+            planificateur.relever(c, c.infos_compte() or compte)
     finally:
         c.deconnecter()
 

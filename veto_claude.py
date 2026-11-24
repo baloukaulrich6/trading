@@ -62,11 +62,16 @@ def demander_veto(donnees: dict) -> tuple[bool, str]:
     except ValueError as erreur:
         return False, f"{erreur} : trade bloqué par prudence"
     except Exception as erreur:  # réseau, clé invalide, quota...
-        log.warning("Claude injoignable : %s", erreur)
-        return False, "Claude injoignable : aucun nouveau trade aujourd'hui"
+        detail = type(erreur).__name__
+        statut = getattr(erreur, "status_code", None)
+        if isinstance(statut, int):
+            detail += f", HTTP {statut}"
+        log.warning("Claude indisponible (%s)", detail)
+        return False, f"Claude indisponible ({detail}) : ordre non envoyé"
 
 
-def interroger_claude(donnees: dict, *, diagnostic: bool = False) -> str:
+def interroger_claude(donnees: dict, *, diagnostic: bool = False,
+                      verifier_recherche: bool = False) -> str:
     """Appelle le modèle et renvoie le texte brut du veto."""
     import anthropic
 
@@ -101,6 +106,8 @@ def interroger_claude(donnees: dict, *, diagnostic: bool = False) -> str:
         if not texte.strip() or reponse.stop_reason != "end_turn":
             blocs = ", ".join(b.type for b in reponse.content) or "aucun"
             raise ValueError(f"réponse texte incomplète (arrêt : {reponse.stop_reason}, blocs : {blocs})")
+        if verifier_recherche and not recherche_ok:
+            raise ValueError("Aucun résultat de recherche web reçu de Claude")
         if not diagnostic and not recherche_ok and lire_decision_stricte(texte)[0]:
             raise ValueError("autorisation sans résultat de recherche web")
         return texte

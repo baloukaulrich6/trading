@@ -1,4 +1,4 @@
-# Robot de trading Turtles + Ehlers + veto Claude
+# Robot de trading Turtles + Ehlers avec revue Claude
 
 Robot Python pour MetaTrader 5 (Exness et HFM), sur graphique journalier.
 
@@ -6,7 +6,7 @@ Robot Python pour MetaTrader 5 (Exness et HFM), sur graphique journalier.
 - **Module contrarien** : achète la panique quand le marché tourne en cycles (RSI sur 2 jours).
 - **Détecteur de régime** : l'Even Better Sinewave de John Ehlers choisit le module actif.
 - **Risque** : 1 % du capital par trade, 4 positions au maximum, arrêt si le capital perd 20 %.
-- **Claude** : simple droit de veto (annonces économiques, événements). Il ne propose jamais de trade.
+- **Claude** : revue consultative des opérations passées. L'exécution ne dépend pas de l'API.
 
 ## Installation (PC Windows)
 
@@ -35,11 +35,11 @@ Ouvre `tableau_analyse.html` dans ton navigateur après l'exécution. Le compte 
 
 ### Exécution automatique sur Windows
 
-Depuis PowerShell, lance `powershell -NoProfile -ExecutionPolicy Bypass -File .\Installer_Automatique.ps1`. La tâche démarre immédiatement et à chaque ouverture de ta session Windows. Laisse le PC éveillé et le lecteur du projet accessible dans ta session. La tâche relit MT5 chaque minute. Le robot utilise la dernière clôture D1 confirmée par HFM et ne tente qu'une entrée par symbole et par clôture. Il réévalue les signaux si le solde change, et bloque les nouvelles entrées sans fonds ou sans signal admissible.
+Depuis PowerShell, lance `powershell -NoProfile -ExecutionPolicy Bypass -File .\Installer_Automatique.ps1`. La tâche démarre immédiatement et à chaque ouverture de ta session Windows. Laisse le PC éveillé et le lecteur du projet accessible dans ta session. La tâche relit MT5 environ toutes les 15 secondes. Le robot utilise la dernière clôture D1 confirmée par HFM et ne tente qu'une entrée par symbole et par clôture. Il réévalue les signaux si le solde change, et bloque les nouvelles entrées sans fonds ou sans signal admissible.
 
-La tâche lit le fichier `.env`. Pour le réel, active `HFM_ACTIF=oui`, `EXNESS_ACTIF=non`, `CLAUDE_ACTIF=oui`, `MODE=ORDRES` et `COMPTE_REEL_CONFIRME=oui`, puis redémarre la tâche après un changement. Le mode par défaut reste `TEST`. Quand la tâche tourne, utilise l'interface pour l'observer et évite de lancer `robot.py` en parallèle.
+La tâche lit le fichier `.env`. Pour le réel, active `HFM_ACTIF=oui`, `EXNESS_ACTIF=non`, `MODE=ORDRES` et `COMPTE_REEL_CONFIRME=oui`, puis redémarre la tâche après un changement. Avec `NKAP_CHOIX_MODE=oui`, ces réglages sélectionnent Réel dès le démarrage. Le mode par défaut sans confirmation reste Observation. Désactive `NKAP_FANTOME` pour l’exécution. Pour surveiller aussi l’or, le bitcoin et l’ether, inclus `XAUUSD,BTCUSD,ETHUSD` dans `HFM_MARCHES` si tu personnalises cette liste. Le terminal doit proposer les symboles correspondants pour le compte actif. Quand la tâche tourne, utilise l'interface pour l'observer et évite de lancer `robot.py` en parallèle.
 
-Le tableau animé Nkap est accessible à `http://127.0.0.1:8765` depuis le navigateur de la machine où tourne la tâche. Il affiche les positions, l'activité récente et les résultats du jour et de la semaine des opérations identifiées comme celles du robot par MT5. `Ouvrir_Trading.vbs` conserve le tableau Windows. Les nouvelles entrées automatiques sont possibles du lundi au vendredi, de 09 h 15 à 21 h par défaut, heure de Douala. Ajuste `HEURE_EXECUTION` et `HEURE_LIMITE` dans `.env` si nécessaire. Les règles de clôture continuent d'être évaluées hors de cette fenêtre.
+Le tableau de trading Nkap est accessible à `http://127.0.0.1:8765` depuis le navigateur de la machine où tourne la tâche. Il affiche les cotations bid/ask, les bougies D1, les positions, le journal filtrable et les résultats du jour et de la semaine des opérations identifiées comme celles du robot par MT5. `Ouvrir_Trading.vbs` conserve le tableau Windows. Les nouvelles entrées automatiques sont possibles du lundi au vendredi, de 09 h à minuit par défaut, heure de Douala. Ajuste `HEURE_EXECUTION` et `HEURE_LIMITE` dans `.env` si nécessaire. Utilise `00:00` comme heure de fin pour minuit. Les règles de clôture continuent d'être évaluées hors de cette fenêtre.
 
 Les rapports locaux sont conservés dans `rapports_automatiques`. Pour les recevoir sur Telegram, crée un bot avec @BotFather, mets son jeton dans `TELEGRAM_TOKEN` dans `.env`, envoie un message au bot et lance `python notifications.py` pour retrouver ton `TELEGRAM_CHAT_ID`. Relance la tâche après configuration. Les alertes couvrent les exécutions MT5 identifiées, avec un bilan le soir en semaine et le samedi à partir de 10 h, heure de Douala. Le rapport est calculé dans la devise du compte.
 
@@ -59,7 +59,9 @@ Sur un compte HFM en USC, ouvre les graphiques des symboles Cent, par exemple `X
 
 Le robot effectue un passage par lancement sur les dernières bougies D1 clôturées. En `MODE=ORDRES`, vérifie dans **Outils → Options → Expert Advisors** que le trading algorithmique est autorisé, y compris via l'API Python. Le passage sur un compte non-démo exige également `COMPTE_REEL_CONFIRME=oui`. Le solde, le volume minimal, la marge et les règles du courtier peuvent empêcher l'exécution d'un ordre.
 
-Une nouvelle entrée sur un compte réel requiert aussi `CLAUDE_ACTIF=oui` et un avis favorable de Claude après le contrôle de risque. Les clôtures du robot suivent leurs propres règles et restent indépendantes du veto.
+Chaque nouvelle position est envoyée avec un stop et un take profit côté MT5. Par défaut, le TP est à 1R, soit la même distance que le stop. Le réglage `NKAP_TP_MULTIPLE_R` dans `.env` fixe ce multiple. En mode ordres, Nkap équipe aussi ses propres positions ouvertes sans TP quand leur stop permet de calculer la cible. Si la cotation de sortie a déjà franchi la cible au moment du relevé, il demande la clôture au marché. Les signaux d'entrée et les sorties de stratégie restent basés sur D1.
+
+Le passage réel suit les signaux, les contrôles de risque et les règles MT5. La revue Claude démarre en arrière-plan au premier relevé disponible de la journée si `CLAUDE_ACTIF=oui` et si une clé API est présente. Elle analyse le journal et les exécutions passées et affiche des propositions à tester. La revue ne modifie pas le code, les positions ni les paramètres d'exécution.
 
 ## Fichiers
 
@@ -70,7 +72,8 @@ Une nouvelle entrée sur un compte réel requiert aussi `CLAUDE_ACTIF=oui` et un
 | `strategie.py` | Règles d'entrée et de sortie |
 | `risque.py` | Taille des positions et arrêt d'urgence |
 | `courtier.py` | Connexion MT5, données et ordres |
-| `veto_claude.py` | Veto de Claude avec recherche web |
+| `revue_claude.py` | Revue quotidienne indépendante de l’envoi d’ordres |
+| `veto_claude.py` | Diagnostics historiques de l’API Claude |
 | `robot.py` | Programme principal |
 | `backtest.py` | Test sur l'historique |
 | `verifier_connexion.py` | Diagnostic avant de lancer le robot |
@@ -83,3 +86,10 @@ Une nouvelle entrée sur un compte réel requiert aussi `CLAUDE_ACTIF=oui` et un
 - Sur un serveur réel (nom contenant « Real » ou « Live »), aucun ordre ne part sans `COMPTE_REEL_CONFIRME=oui`.
 - Ne partage jamais le fichier `.env`.
 - Résultats passés ≠ résultats futurs. La majorité des comptes CFD de particuliers perdent de l'argent.
+
+## Recherche Nkap multi-agents
+
+Installe le paquet avec `python -m pip install -e ".[dev]"`, puis consulte
+[la procédure d'export et de validation](docs/exploitation.md). Le rapport de recherche
+ne modifie pas les paramètres des lanceurs MT5 existants. L'avancement et les écarts
+sont consignés dans [les décisions](docs/decisions.md).

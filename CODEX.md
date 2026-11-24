@@ -1,0 +1,7 @@
+# Règles permanentes de Nkap
+
+- Objectif : maximiser le rendement annualisé net divisé par la perte maximale. Les coûts incluent spread, commission, swap, glissement et Claude. Validation hors échantillon : facteur de profit ≥ 1,2, perte maximale ≤ 20 %, ≥ 100 trades, au moins 2 fenêtres rentables sur 3, et coût Claude ≤ 10 % du profit net prévu.
+- Ne modifie pas `config/limites_risque.yaml` sans accord écrit. Risque courant 1 %, plafond absolu 1,5 %, risque ouvert 4 %, quatre positions, deux expositions par sens, pause après 3 % de perte du jour ou cinq pertes consécutives, réduction après deux pertes et coupe-circuit sous 80 % du sommet. Jamais de martingale, de grille, de moyenne à la baisse, d'ordre sans stop ou de recul du stop.
+- Relais : Éclaireur → Filtre → Analyste → Trésorier → Veto → Exécuteur. Le Gardien gère les positions, la Météo explique le contexte, le Greffier trace et le Chercheur propose hors production. Seul un humain approuve une promotion.
+- Modes de la nouvelle architecture : TEST en lecture seule, DEMO sur un compte démo, REEL confirmé explicitement et réservé à un champion validé. Ne confonds pas un résultat synthétique et une validation en conditions réelles.
+- Python 3.11, types, documentation française et dépendances injectées. Ne consigne aucun secret. Avant chaque commit : `python -m pytest`, `python -m ruff check`, `python -m mypy` et `python tests_robot.py`.

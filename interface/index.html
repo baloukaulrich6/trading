@@ -1,658 +1,604 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="fr">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Nkap · ton robot de trading</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,700;12..96,800&display=swap" rel="stylesheet">
-<style>
-/* ------------------------------------------------------------------ jetons
-   Palette inspirée du ndop, l'étoffe royale indigo et blanche des Grassfields
-   du Cameroun, et de l'or des pièces (nkap = l'argent).                      */
-:root{
-  --indigo-nuit:#1C2452;
-  --indigo:#2E3A87;
-  --indigo-doux:#5A66B8;
-  --ndop:#EEF1F8;
-  --ndop-ombre:#DCE2F0;
-  --page:#E5E9F4;
-  --or:#F0B429;
-  --or-clair:#FFE08A;
-  --or-fonce:#B7791F;
-  --hibiscus:#E5484D;
-  --lagune:#1FA39A;
-  --encre:#1C2452;
-  --encre-douce:#5B6386;
-  --rayon:22px;
-  --ui:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
-  --voix:"Baloo 2", "Segoe UI Rounded", "Arial Rounded MT Bold", system-ui, sans-serif;
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Nkap — Terminal de suivi</title>
+  <style>
+:root {
+  color-scheme: dark;
+  --fond: #101418;
+  --surface: #181e24;
+  --ligne: #2b343d;
+  --texte: #edf2f4;
+  --secondaire: #a8b4bf;
+  --vert: #79e2b2;
+  --rouge: #fa9b92;
+  --ambre: #f3ca7e;
+  --bleu: #a3caff;
+  font: 14px/1.45 "Segoe UI", system-ui, sans-serif;
+  scroll-padding-top: 74px;
 }
-*{box-sizing:border-box}
-html,body{margin:0}
-body{
-  font-family:var(--ui);
-  color:var(--encre);
-  background:var(--page);
-  font-size:16px;
-  line-height:1.5;
-  -webkit-font-smoothing:antialiased;
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--fond); color: var(--texte); }
+[hidden] { display: none !important; }
+button, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+button:focus-visible, a:focus-visible, select:focus-visible, summary:focus-visible {
+  outline: 2px solid var(--vert); outline-offset: 3px;
 }
-.chiffres{font-variant-numeric:tabular-nums}
-
-/* ------------------------------------------------------------------ scène */
-.scene{
-  position:relative;
-  min-height:400px;
-  overflow:hidden;
-  color:#fff;
-  background:linear-gradient(180deg,var(--ciel-haut),var(--ciel-bas));
-  transition:background 1.2s ease;
-  --ciel-haut:#141B44; --ciel-bas:#2E3A87;
+button:disabled { opacity: .55; cursor: wait; }
+a { color: inherit; text-decoration: none; }
+p, h1, h2, h3 { margin: 0; }
+.barre { background: #151a20; border-bottom: 1px solid var(--ligne); position: sticky; top: 0; z-index: 3; }
+.barre-interieure, main { width: min(1440px, calc(100% - 64px)); margin: 0 auto; }
+.barre-interieure { min-height: 59px; display: flex; align-items: center; gap: 46px; }
+.marque { display: inline-flex; gap: 10px; align-items: center; font-size: 19px; font-weight: 760; letter-spacing: -.04em; }
+.logo { display: grid; place-items: center; width: 29px; height: 29px; border-radius: 7px; background: var(--vert); color: #142825; font-size: 17px; }
+nav { display: flex; gap: 25px; min-height: 58px; color: var(--secondaire); }
+nav a { display: grid; place-items: center; white-space: nowrap; border-bottom: 2px solid transparent; }
+nav a:hover, nav a:focus-visible { color: var(--texte); border-bottom-color: var(--vert); }
+.connexion { display: flex; gap: 8px; align-items: center; margin-left: auto; color: var(--secondaire); white-space: nowrap; }
+.point { width: 8px; height: 8px; border-radius: 50%; background: var(--ambre); }
+.point[data-etat="ok"] { background: var(--vert); }
+.point[data-etat="off"] { background: var(--rouge); }
+main { padding: 23px 0 48px; }
+.entete { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
+h1 { font-size: clamp(27px, 3vw, 40px); line-height: 1.18; letter-spacing: -.045em; font-weight: 720; }
+.entete p, .panneau-entete p { color: var(--secondaire); margin-top: 5px; }
+#message-pilotage { min-height: 20px; font-size: 12px; max-width: 310px; }
+#message-pilotage:empty { min-height: 0; margin: 0; }
+.choix { display: inline-flex; align-items: center; padding: 3px; gap: 2px; border: 1px solid var(--ligne); background: #11161b; border-radius: 8px; }
+.choix button { border: 0; background: transparent; padding: 7px 11px; border-radius: 5px; color: var(--secondaire); white-space: nowrap; }
+.choix button:hover { color: var(--texte); background: #23303a; }
+.choix button[aria-pressed="true"] { color: var(--texte); background: #2b3843; }
+.choix button[data-mode="REEL"][aria-pressed="true"] { color: var(--rouge); background: #42272a; }
+.barre-etat { display: flex; align-items: center; gap: 15px; flex-wrap: wrap; color: var(--secondaire); margin: 13px 0 15px; font-size: 12px; }
+.maj { margin-left: auto; }
+.pastille { display: inline-flex; width: fit-content; padding: 3px 8px; border-radius: 5px; font-size: 12px; font-weight: 650; background: #26313c; color: var(--bleu); white-space: nowrap; }
+.pastille[data-ton="positif"] { background: #1d3830; color: var(--vert); }
+.pastille[data-ton="negatif"] { background: #412a2d; color: var(--rouge); }
+.pastille[data-ton="attention"] { background: #3a3123; color: var(--ambre); }
+.indicateurs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--ligne); border-radius: 11px; background: var(--surface); overflow: hidden; margin-bottom: 17px; }
+.indicateurs > div { min-width: 0; display: grid; gap: 5px; padding: 16px 18px 15px; border-right: 1px solid var(--ligne); }
+.indicateurs > div:last-child { border-right: 0; }
+.indicateurs span, .indicateurs small { color: var(--secondaire); }
+.indicateurs strong { font-size: clamp(18px, 2.25vw, 29px); letter-spacing: -.025em; line-height: 1.15; }
+.indicateurs strong, .chiffres, .lecture-cours { font-variant-numeric: tabular-nums; }
+.indicateurs small { min-height: 18px; }
+.objectif { background: #172923; border: 1px solid #2d433b; border-radius: 8px; color: #bdebd6; padding: 9px 12px; margin-bottom: 17px; }
+.grille-marches, .grille-operations { display: grid; grid-template-columns: minmax(0, 2.25fr) minmax(300px, 1fr); gap: 16px; margin-bottom: 16px; align-items: start; }
+.grille-marches { align-items: stretch; }
+.panneau { min-width: 0; background: var(--surface); border: 1px solid var(--ligne); border-radius: 11px; overflow: hidden; }
+.panneau-entete { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 13px 15px; border-bottom: 1px solid var(--ligne); }
+h2 { font-size: 16px; letter-spacing: -.015em; }
+.panneau-entete p { font-size: 12px; }
+.periode button { font-size: 12px; padding: 5px 8px; }
+.zone-cours { position: relative; height: clamp(226px, 24vw, 286px); background: #151b21; }
+canvas { display: block; width: 100%; height: 100%; }
+#vide-cours { position: absolute; inset: 0; display: grid; place-items: center; padding: 20px; color: var(--secondaire); text-align: center; pointer-events: none; }
+.lecture-cours { padding: 8px 15px; min-height: 35px; color: var(--secondaire); border-top: 1px solid var(--ligne); font-size: 12px; }
+.liste-marches { max-height: 380px; overflow: auto; }
+.marche { width: 100%; display: grid; grid-template-columns: minmax(66px, .9fr) minmax(62px, .85fr) minmax(78px, 1fr); gap: 7px; align-items: center; text-align: left; box-shadow: inset 2px 0 transparent; border: 0; border-bottom: 1px solid var(--ligne); background: transparent; padding: 9px 14px; }
+.marche:last-child { border-bottom: 0; }
+.marche:hover, .marche[aria-pressed="true"] { background: #202b33; }
+.marche[aria-pressed="true"] { box-shadow: inset 2px 0 var(--vert); }
+.marche small { display: block; color: var(--secondaire); font-size: 11px; }
+.marche .chiffres { text-align: right; }
+.signal { text-align: right; color: var(--secondaire); font-size: 11px; }
+.signal[data-ton="positif"], .positif { color: var(--vert); }
+.signal[data-ton="negatif"], .negatif { color: var(--rouge); }
+.filtre select { background: #12171d; border: 1px solid var(--ligne); border-radius: 6px; padding: 6px 8px; font-size: 12px; }
+.journal { max-height: 440px; overflow: auto; }
+.journal details { border-bottom: 1px solid var(--ligne); }
+.journal details:last-child { border-bottom: 0; }
+.journal summary { list-style: none; cursor: pointer; padding: 11px 15px; display: grid; grid-template-columns: 16px 87px minmax(70px, .75fr) minmax(110px, 1.2fr) 49px; gap: 8px; align-items: center; }
+.journal summary::-webkit-details-marker { display: none; }
+.journal summary:hover { background: #202a32; }
+.journal summary::before { content: '›'; color: var(--secondaire); font-size: 19px; line-height: 1; }
+.journal details[open] summary::before { transform: rotate(90deg); }
+.journal time, .journal .type-mode { color: var(--secondaire); font-size: 11px; }
+.journal .detail { padding: 1px 15px 14px 39px; color: var(--secondaire); overflow-wrap: anywhere; }
+.positions { overflow: auto; }
+.positions table { width: 100%; border-collapse: collapse; white-space: nowrap; }
+.positions th, .positions td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--ligne); }
+.positions th { color: var(--secondaire); font-size: 12px; }
+.positions tr:last-child td { border-bottom: 0; }
+.vide { padding: 17px; color: var(--secondaire); }
+.lecteur { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+@media (max-width: 1000px) {
+  .barre-interieure, main { width: calc(100% - 32px); }
+  .grille-marches, .grille-operations { grid-template-columns: minmax(0, 1.7fr) minmax(258px, 1fr); }
 }
-body[data-moment="aube"] .scene{--ciel-haut:#2E3A87;--ciel-bas:#F3A97F}
-body[data-moment="jour"] .scene{--ciel-haut:#5C9DEB;--ciel-bas:#CFE3FF}
-body[data-moment="or"] .scene{--ciel-haut:#E99A2C;--ciel-bas:#FFE3A1}
-body[data-moment="crepuscule"] .scene{--ciel-haut:#38406F;--ciel-bas:#8B8FB5}
-body[data-moment="alerte"] .scene{--ciel-haut:#4A1E3A;--ciel-bas:#B5435A}
-body[data-moment="lavande"] .scene{--ciel-haut:#4B4F9C;--ciel-bas:#B8B9E8}
-
-.astre{
-  position:absolute; top:42px; right:9%;
-  width:92px; height:92px; border-radius:50%;
-  transition:all 1.2s ease;
+@media (max-width: 750px) {
+  .barre-interieure { gap: 16px; }
+  nav { display: none; }
+  main { padding-top: 20px; }
+  .entete { flex-wrap: wrap; gap: 12px; }
+  .barre-etat { gap: 8px 12px; }
+  .maj { margin-left: 0; }
+  .indicateurs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .indicateurs > div { padding: 13px 12px; }
+  .indicateurs > div:nth-child(2) { border-right: 0; }
+  .indicateurs > div:nth-child(-n+2) { border-bottom: 1px solid var(--ligne); }
+  .grille-marches, .grille-operations { grid-template-columns: minmax(0, 1fr); }
+  .journal summary { grid-template-columns: 10px 49px minmax(56px, .8fr) minmax(78px, 1.3fr) 33px; gap: 5px; padding-inline: 8px; font-size: 12px; }
+  .journal summary .pastille { white-space: normal; font-size: 11px; }
+  .panneau-entete { padding-inline: 11px; }
 }
-body[data-moment="nuit"] .astre,body[data-moment="crepuscule"] .astre,body[data-moment="lavande"] .astre{
-  width:78px; height:78px; background:transparent;
-  box-shadow:inset 20px -10px 0 0 #F6F1D8;
-  filter:drop-shadow(0 0 18px rgba(255,250,220,.45));
-  transform:rotate(-12deg);
-}
-body[data-moment="aube"] .astre,body[data-moment="jour"] .astre,body[data-moment="or"] .astre,body[data-moment="alerte"] .astre{
-  background:radial-gradient(circle,#FFF6D6,#FFD66B 55%,rgba(255,214,107,0));
-  width:150px;height:150px; top:18px;
-}
-body[data-moment="aube"] .astre{top:150px}
-
-.etoiles{position:absolute; inset:0; pointer-events:none; transition:opacity 1.2s}
-body:not([data-moment="nuit"]):not([data-moment="lavande"]) .etoiles{opacity:0}
-.etoile{position:absolute; width:3px; height:3px; border-radius:50%; background:#fff; animation:scintille 3.6s ease-in-out infinite}
-@keyframes scintille{0%,100%{opacity:.2}50%{opacity:1}}
-
-/* bande ndop : l'horizon de la scène */
-.ndop{
-  position:absolute; left:0; right:0; bottom:0; height:46px;
-  background-color:var(--indigo-nuit);
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='46' height='46' viewBox='0 0 46 46'%3E%3Cg fill='none' stroke='%23EEF1F8' stroke-width='2.2'%3E%3Cpath d='M23 6 L37 23 L23 40 L9 23 Z'/%3E%3Ccircle cx='23' cy='23' r='4.5'/%3E%3C/g%3E%3Cg fill='%23EEF1F8'%3E%3Ccircle cx='0' cy='0' r='3'/%3E%3Ccircle cx='46' cy='0' r='3'/%3E%3Ccircle cx='0' cy='46' r='3'/%3E%3Ccircle cx='46' cy='46' r='3'/%3E%3C/g%3E%3C/svg%3E");
-  background-size:46px 46px;
-  border-top:4px solid var(--or);
-}
-
-.scene-contenu{
-  position:relative; z-index:2;
-  max-width:1180px; margin:0 auto;
-  padding:34px 28px 78px;
-  display:grid; grid-template-columns:300px 1fr; gap:24px; align-items:center;
-}
-.marque{
-  position:absolute; z-index:3; top:22px; left:28px;
-  font-family:var(--voix); font-weight:800; font-size:1.35rem; letter-spacing:.01em;
-  display:flex; align-items:center; gap:10px;
-}
-.marque small{font-family:var(--ui); font-weight:500; font-size:.9rem; opacity:.8}
-.pastille-mode{
-  position:absolute; z-index:3; top:22px; right:28px;
-  font-size:.85rem; font-weight:700; padding:6px 14px; border-radius:999px;
-  background:rgba(255,255,255,.16); backdrop-filter:blur(6px);
-}
-.pastille-mode.reel{background:var(--hibiscus)}
-
-/* ------------------------------------------------------------------ mascotte */
-.mascotte-zone{position:relative; height:320px; display:grid; place-items:center; cursor:pointer}
-.mascotte-zone:focus-visible{outline:3px solid var(--or); outline-offset:6px; border-radius:24px}
-#mascotte{width:250px; height:290px; overflow:visible}
-#mascotte .flotte{animation:flotte 4s ease-in-out infinite; transform-box:fill-box; transform-origin:50% 100%}
-#mascotte .ombre{animation:ombre 4s ease-in-out infinite; transform-box:fill-box; transform-origin:center}
-@keyframes flotte{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
-@keyframes ombre{0%,100%{transform:scale(1);opacity:.35}50%{transform:scale(.82);opacity:.22}}
-.hop #mascotte .corps{animation:hop .7s cubic-bezier(.3,1.6,.5,1)}
-@keyframes hop{0%{transform:translateY(0) scale(1,1)}25%{transform:translateY(4px) scale(1.08,.9)}55%{transform:translateY(-26px) scale(.94,1.07)}100%{transform:translateY(0) scale(1,1)}}
-#mascotte .corps{transform-box:fill-box; transform-origin:50% 100%}
-
-/* yeux */
-.pupilles{transform:translate(var(--gx,0px),var(--gy,0px)); transition:transform .25s ease-out}
-.paupiere{transform-box:fill-box; transform-origin:50% 0; transform:scaleY(0); transition:transform .35s ease; animation:cligne 5s infinite}
-@keyframes cligne{0%,92%,100%{transform:scaleY(var(--ouvert,0))}95%{transform:scaleY(1)}}
-.yeux-heureux,.yeux-fermes,.bouche > *{opacity:0; transition:opacity .25s}
-.sourcils{transition:transform .35s ease; transform-box:fill-box; transform-origin:center}
-.antenne-bulbe{transition:fill .5s}
-.bras{transform-box:fill-box; transition:transform .5s cubic-bezier(.3,1.4,.5,1)}
-.bras-g{transform-origin:100% 15%}
-.bras-d{transform-origin:0% 15%}
-.ecran-scan{opacity:0}
-
-/* humeurs */
-[data-humeur="sommeil"] .paupiere{--ouvert:1; animation:none; transform:scaleY(1)}
-[data-humeur="sommeil"] .yeux-fermes{opacity:1}
-[data-humeur="sommeil"] .bouche .b-o{opacity:1}
-[data-humeur="sommeil"] #mascotte .flotte{animation-duration:6s}
-
-[data-humeur="veille"] .paupiere{--ouvert:.45}
-[data-humeur="veille"] .bouche .b-neutre{opacity:1}
-[data-humeur="veille"] .pupilles{animation:balaye 6s ease-in-out infinite}
-@keyframes balaye{0%,100%{transform:translate(-4px,1px)}50%{transform:translate(4px,1px)}}
-
-[data-humeur="reveil"] .bouche .b-sourire{opacity:1}
-[data-humeur="reveil"] .bras-d{animation:salut 1s ease-in-out 3}
-@keyframes salut{0%,100%{transform:rotate(-20deg)}50%{transform:rotate(-125deg)}}
-
-[data-humeur="analyse"] .paupiere{--ouvert:.3}
-[data-humeur="analyse"] .bouche .b-o{opacity:1}
-[data-humeur="analyse"] .pupilles{animation:balaye 1.6s ease-in-out infinite}
-[data-humeur="analyse"] .ecran-scan{opacity:1; animation:scan 1.8s linear infinite}
-@keyframes scan{0%{transform:translateY(-34px)}100%{transform:translateY(38px)}}
-
-[data-humeur="veto"] .bouche .b-droite{opacity:1}
-[data-humeur="veto"] .sourcils{transform:translateY(3px)}
-[data-humeur="veto"] .sourcil-g{transform:rotate(14deg)}
-[data-humeur="veto"] .sourcil-d{transform:rotate(-14deg)}
-[data-humeur="veto"] .bras-d{transform:rotate(-120deg)}
-[data-humeur="veto"] .main-stop{opacity:1}
-
-[data-humeur="trade"] .bouche .b-sourire{opacity:1}
-[data-humeur="trade"] .bras-g{transform:rotate(60deg)}
-[data-humeur="trade"] .bras-d{transform:rotate(-60deg)}
-
-[data-humeur="gain"] .yeux-normaux{opacity:0}
-[data-humeur="gain"] .yeux-heureux{opacity:1}
-[data-humeur="gain"] .bouche .b-sourire{opacity:1}
-[data-humeur="gain"] .bras-g{transform:rotate(115deg)}
-[data-humeur="gain"] .bras-d{transform:rotate(-115deg)}
-[data-humeur="content"] .yeux-normaux{opacity:0}
-[data-humeur="content"] .yeux-heureux{opacity:1}
-[data-humeur="content"] .bouche .b-sourire{opacity:1}
-
-[data-humeur="perte"] .paupiere{--ouvert:.35}
-[data-humeur="perte"] .bouche .b-triste{opacity:1}
-[data-humeur="perte"] .sourcil-g{transform:rotate(-16deg)}
-[data-humeur="perte"] .sourcil-d{transform:rotate(16deg)}
-[data-humeur="perte"] .pupilles{transform:translate(0,4px)}
-[data-humeur="perte"] .bras-g{transform:rotate(-8deg)}
-[data-humeur="perte"] .bras-d{transform:rotate(8deg)}
-
-[data-humeur="attente_fonds"] .bouche .b-o{opacity:1}
-[data-humeur="attente_fonds"] .pupilles{transform:translate(0,-5px)}
-[data-humeur="attente_fonds"] .bras-d{transform:rotate(-70deg)}
-
-[data-humeur="erreur"] .paupiere{--ouvert:.15}
-[data-humeur="erreur"] .bouche .b-triste{opacity:1}
-[data-humeur="erreur"] .sourcil-g{transform:rotate(-18deg)}
-[data-humeur="erreur"] .sourcil-d{transform:rotate(18deg)}
-.main-stop{opacity:0; transition:opacity .3s}
-
-/* particules */
-.particules{position:absolute; inset:0; pointer-events:none}
-.particules span{position:absolute; opacity:0}
-.z{font-family:var(--voix); font-weight:800; color:#fff; left:62%; top:22%}
-[data-humeur="sommeil"] .z{animation:zz 3.6s ease-in infinite}
-.z:nth-child(2){animation-delay:1.2s!important; font-size:1.4rem}
-.z:nth-child(3){animation-delay:2.4s!important; font-size:1.8rem}
-@keyframes zz{0%{opacity:0; transform:translate(0,0) rotate(-8deg)}20%{opacity:1}100%{opacity:0; transform:translate(46px,-90px) rotate(12deg)}}
-.piece{
-  width:22px; height:22px; border-radius:50%; top:-8%; left:50%;
-  background:radial-gradient(circle at 35% 35%,var(--or-clair),var(--or) 55%,var(--or-fonce));
-  box-shadow:inset 0 0 0 3px rgba(183,121,31,.55);
-}
-[data-humeur="gain"] .piece{animation:pluie 1.9s cubic-bezier(.5,0,.8,.6) infinite}
-.piece:nth-child(5){margin-left:-70px; animation-delay:.3s!important}
-.piece:nth-child(6){margin-left:60px; animation-delay:.7s!important}
-.piece:nth-child(7){margin-left:-24px; animation-delay:1.1s!important}
-.piece:nth-child(8){margin-left:34px; animation-delay:1.5s!important}
-@keyframes pluie{0%{opacity:0; transform:translateY(0) rotateY(0)}15%{opacity:1}100%{opacity:0; transform:translateY(150px) rotateY(540deg)}}
-.goutte{
-  width:12px; height:17px; left:63%; top:30%;
-  background:#9FD3FF; border-radius:50% 50% 50% 50% / 62% 62% 38% 38%;
-}
-[data-humeur="perte"] .goutte{animation:goutte 2.4s ease-in infinite}
-@keyframes goutte{0%{opacity:0; transform:translateY(0)}25%{opacity:1}100%{opacity:0; transform:translateY(40px)}}
-.question{font-family:var(--voix); font-weight:800; font-size:2.2rem; left:64%; top:6%; color:#fff}
-[data-humeur="attente_fonds"] .question{animation:respire 2s ease-in-out infinite}
-@keyframes respire{0%,100%{opacity:.4; transform:scale(.9)}50%{opacity:1; transform:scale(1.1)}}
-
-/* ------------------------------------------------------------------ bulle */
-.parole{max-width:620px}
-.bulle{
-  position:relative;
-  background:#fff; color:var(--encre);
-  border-radius:28px; padding:22px 26px;
-  font-family:var(--voix); font-weight:600; font-size:1.35rem; line-height:1.35;
-  box-shadow:0 18px 40px -18px rgba(14,20,60,.55);
-  min-height:96px;
-}
-.bulle::before{
-  content:""; position:absolute; left:-14px; top:38px;
-  border-width:12px 18px 12px 0; border-style:solid;
-  border-color:transparent #fff transparent transparent;
-}
-.curseur{display:inline-block; width:2px; height:1.1em; background:var(--indigo); vertical-align:-3px; margin-left:2px; animation:curseur 1s steps(1) infinite}
-@keyframes curseur{50%{opacity:0}}
-.reveil-ligne{margin:16px 4px 0; font-size:1rem; font-weight:500; display:flex; flex-wrap:wrap; gap:6px 18px}
-.reveil-ligne b{font-weight:800}
-body[data-moment="jour"] .reveil-ligne,body[data-moment="or"] .reveil-ligne{color:var(--indigo-nuit)}
-
-/* ------------------------------------------------------------------ tableau */
-main{
-  max-width:1180px; margin:28px auto 0; padding:0 28px 40px;
-  position:relative; z-index:4;
-  display:grid; grid-template-columns:minmax(0,7fr) minmax(0,5fr); gap:22px;
-}
-.panneau{background:var(--ndop); border-radius:var(--rayon); padding:24px 26px}
-.panneau h2{margin:0 0 16px; font-size:1.15rem; font-weight:800; letter-spacing:-.01em}
-.colonne{display:flex; flex-direction:column; gap:22px}
-
-/* capital : le « plateau à pièces » */
-.capital{background:var(--indigo-nuit); color:#fff; padding:26px 28px; position:relative; overflow:hidden}
-.capital h2{color:#C9CFF0}
-.comptes{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:26px; position:relative; z-index:1}
-.compte-nom{display:flex; align-items:center; gap:8px; font-weight:700; color:#C9CFF0}
-.voyant{width:9px; height:9px; border-radius:50%; background:var(--lagune); box-shadow:0 0 0 4px rgba(31,163,154,.22)}
-.voyant.off{background:var(--hibiscus); box-shadow:0 0 0 4px rgba(229,72,77,.22)}
-.montant{font-size:clamp(2.4rem,5vw,3.4rem); font-weight:800; letter-spacing:-.03em; line-height:1.05; margin:8px 0 2px}
-.montant small{font-size:.38em; font-weight:700; letter-spacing:0; margin-left:6px; color:var(--or)}
-.equivalent{color:#AEB6E6; font-size:.95rem}
-.resultats{display:flex; gap:20px; margin-top:14px; font-size:.95rem; color:#C9CFF0}
-.resultats strong{display:block; font-size:1.15rem; color:#fff}
-.plus{color:#A86A0C!important}
-.moins{color:#C9262C!important}
-.capital .plus{color:var(--or)!important}
-.capital .moins{color:#FF8A8D!important}
-.details-compte{margin-top:12px; font-size:.85rem; color:#8F98CF}
-
-/* positions */
-#positions{overflow-x:auto}
-table{width:100%; border-collapse:collapse; font-size:.95rem}
-th{text-align:left; font-weight:600; color:var(--encre-douce); padding:0 8px 10px; font-size:.85rem}
-td{padding:12px 8px; border-top:1px solid var(--ndop-ombre)}
-td.droite,th.droite{text-align:right}
-.sens{display:inline-block; padding:2px 10px; border-radius:999px; font-weight:700; font-size:.8rem}
-.sens.achat{background:rgba(31,163,154,.14); color:#137A73}
-.sens.vente{background:rgba(229,72,77,.12); color:#B3262B}
-.vide{color:var(--encre-douce); padding:8px 0 4px}
-
-/* fil d'activité */
-.fil{grid-row:span 2}
-.fil ol{list-style:none; margin:0; padding:0; position:relative}
-.fil ol::before{content:""; position:absolute; left:15px; top:6px; bottom:6px; width:2px; background:var(--ndop-ombre)}
-.fil li{position:relative; padding:0 0 18px 46px}
-.fil .puce{
-  position:absolute; left:4px; top:0; width:24px; height:24px; border-radius:50%;
-  display:grid; place-items:center; font-size:.72rem; font-weight:800; color:#fff; background:var(--indigo-doux);
-  box-shadow:0 0 0 4px var(--ndop);
-}
-.puce.trade,.puce.sortie{background:var(--indigo)}
-.puce.gain,.puce.fonds{background:var(--or); color:var(--indigo-nuit)}
-.puce.perte,.puce.erreur{background:var(--hibiscus)}
-.puce.veto{background:#7A3FA0}
-.puce.reveil{background:#F3A97F; color:var(--indigo-nuit)}
-.fil .titre{font-weight:700}
-.fil .detail{color:var(--encre-douce); font-size:.92rem}
-.fil .quand{color:var(--encre-douce); font-size:.8rem}
-
-footer{max-width:1180px; margin:0 auto; padding:0 28px 36px; color:var(--encre-douce); font-size:.85rem; display:flex; flex-wrap:wrap; gap:8px 24px}
-.demo{display:none; background:var(--or); color:var(--indigo-nuit); font-weight:700; text-align:center; padding:6px; font-size:.85rem}
-body.mode-demo .demo{display:block}
-.sr-only{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0)}
-
-@media (max-width:860px){
-  .scene-contenu{grid-template-columns:1fr; padding-top:70px; justify-items:center; text-align:left}
-  .mascotte-zone{height:260px}
-  #mascotte{width:200px; height:232px}
-  .bulle::before{left:50%; top:-14px; border-width:0 12px 16px 12px; border-color:transparent transparent #fff transparent; transform:translateX(-50%)}
-  main{grid-template-columns:minmax(0,1fr); padding:0 16px 32px}
-  .fil{grid-row:auto}
-  .marque small{display:none}
-  .panneau{padding:20px 18px}
-  .masquable{display:none}
-  .astre{right:4%}
-}
-@media (prefers-reduced-motion:reduce){
-  *,*::before,*::after{animation:none!important; transition:none!important}
-}
-</style>
+  </style>
 </head>
-<body data-humeur="sommeil" data-moment="nuit">
-
-<section class="scene" aria-label="Nkap et ce qu'il fait maintenant">
-  <div class="etoiles" id="etoiles"></div>
-  <div class="astre"></div>
-  <div class="marque"><span id="nom">Nkap</span><small>ton robot de trading</small></div>
-  <div class="pastille-mode" id="mode">Mode test</div>
-
-  <div class="scene-contenu">
-    <div class="mascotte-zone" id="zone" tabindex="0" role="button" aria-label="Parler à Nkap">
-      <div class="particules" aria-hidden="true">
-        <span class="z">z</span><span class="z">z</span><span class="z">Z</span>
-        <span class="piece"></span><span class="piece"></span><span class="piece"></span><span class="piece"></span><span class="piece"></span>
-        <span class="goutte"></span><span class="question">?</span>
-      </div>
-
-      <svg id="mascotte" viewBox="0 0 240 280" aria-hidden="true">
-        <defs>
-          <radialGradient id="or-corps" cx="38%" cy="30%" r="80%">
-            <stop offset="0" stop-color="#FFF1BE"/>
-            <stop offset=".35" stop-color="#FFD25E"/>
-            <stop offset=".75" stop-color="#F0B429"/>
-            <stop offset="1" stop-color="#C4861C"/>
-          </radialGradient>
-          <linearGradient id="ecran" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stop-color="#34419A"/>
-            <stop offset="1" stop-color="#18204C"/>
-          </linearGradient>
-          <radialGradient id="reacteur" cx="50%" cy="50%" r="50%">
-            <stop offset="0" stop-color="#FFE9A8" stop-opacity=".95"/>
-            <stop offset="1" stop-color="#FFB627" stop-opacity="0"/>
-          </radialGradient>
-          <filter id="halo" x="-100%" y="-100%" width="300%" height="300%">
-            <feGaussianBlur stdDeviation="4" result="flou"/>
-            <feMerge><feMergeNode in="flou"/><feMergeNode in="SourceGraphic"/></feMerge>
-          </filter>
-          <clipPath id="oeil-g"><ellipse cx="98" cy="118" rx="16" ry="18"/></clipPath>
-          <clipPath id="oeil-d"><ellipse cx="142" cy="118" rx="16" ry="18"/></clipPath>
-          <clipPath id="ecran-clip"><rect x="60" y="76" width="120" height="92" rx="38"/></clipPath>
-        </defs>
-
-        <ellipse class="ombre" cx="120" cy="266" rx="56" ry="9" fill="#0B1030"/>
-
-        <g class="flotte">
-          <g class="corps">
-            <ellipse cx="120" cy="236" rx="22" ry="16" fill="url(#reacteur)"/>
-
-            <!-- antenne -->
-            <path d="M120 54 C120 40 126 34 124 22" stroke="#B7791F" stroke-width="5" fill="none" stroke-linecap="round"/>
-            <circle class="antenne-bulbe" id="bulbe" cx="124" cy="17" r="10" fill="#9FB4FF" filter="url(#halo)"/>
-            <circle cx="120" cy="17" r="3" fill="#fff" opacity=".8"/>
-
-            <!-- corps pièce d'or -->
-            <rect x="40" y="48" width="160" height="182" rx="76" fill="url(#or-corps)"/>
-            <rect x="48" y="56" width="144" height="166" rx="70" fill="none" stroke="#B7791F" stroke-opacity=".35" stroke-width="2.5"/>
-            <path d="M70 70 C88 56 112 52 130 54" stroke="#fff" stroke-opacity=".7" stroke-width="7" fill="none" stroke-linecap="round"/>
-            <rect x="104" y="44" width="32" height="7" rx="3.5" fill="#7A4D0E"/>
-            <circle cx="40" cy="128" r="7" fill="#C4861C"/><circle cx="200" cy="128" r="7" fill="#C4861C"/>
-            <path d="M88 196 Q120 210 152 196" stroke="#B7791F" stroke-opacity=".45" stroke-width="3" fill="none" stroke-linecap="round"/>
-
-            <!-- bras -->
-            <g class="bras bras-g">
-              <path d="M46 150 C26 158 20 176 26 190" stroke="#D69A22" stroke-width="15" fill="none" stroke-linecap="round"/>
-              <circle cx="26" cy="192" r="11" fill="#F6C84C"/>
-            </g>
-            <g class="bras bras-d">
-              <path d="M194 150 C214 158 220 176 214 190" stroke="#D69A22" stroke-width="15" fill="none" stroke-linecap="round"/>
-              <circle cx="214" cy="192" r="11" fill="#F6C84C"/>
-              <g class="main-stop"><circle cx="214" cy="192" r="15" fill="#fff"/><rect x="206" y="189" width="16" height="6" rx="3" fill="#E5484D"/></g>
-            </g>
-
-
-            <!-- écran-visage -->
-            <rect x="60" y="76" width="120" height="92" rx="38" fill="url(#ecran)"/>
-            <g clip-path="url(#ecran-clip)">
-              <rect class="ecran-scan" x="60" y="118" width="120" height="6" fill="#7FE7FF" opacity=".55"/>
-            </g>
-            <path d="M74 92 C82 82 96 78 110 78" stroke="#fff" stroke-opacity=".18" stroke-width="6" fill="none" stroke-linecap="round"/>
-
-            <g class="sourcils">
-              <rect class="sourcil-g sourcils" x="86" y="93" width="24" height="5" rx="2.5" fill="#DDE4FF"/>
-              <rect class="sourcil-d sourcils" x="130" y="93" width="24" height="5" rx="2.5" fill="#DDE4FF"/>
-            </g>
-
-            <g class="yeux-normaux" style="transition:opacity .25s">
-              <ellipse cx="98" cy="118" rx="16" ry="18" fill="#fff"/>
-              <ellipse cx="142" cy="118" rx="16" ry="18" fill="#fff"/>
-              <g class="pupilles">
-                <circle cx="99" cy="120" r="9" fill="#141B44"/><circle cx="143" cy="120" r="9" fill="#141B44"/>
-                <circle cx="95.5" cy="115.5" r="3.4" fill="#fff"/><circle cx="139.5" cy="115.5" r="3.4" fill="#fff"/>
-                <circle cx="102" cy="123" r="1.6" fill="#fff" opacity=".8"/><circle cx="146" cy="123" r="1.6" fill="#fff" opacity=".8"/>
-              </g>
-              <g clip-path="url(#oeil-g)"><rect class="paupiere" x="80" y="99" width="36" height="38" fill="#2A3684"/></g>
-              <g clip-path="url(#oeil-d)"><rect class="paupiere" x="124" y="99" width="36" height="38" fill="#2A3684"/></g>
-            </g>
-            <g class="yeux-fermes" stroke="#fff" stroke-width="4.5" fill="none" stroke-linecap="round">
-              <path d="M85 118 Q98 128 111 118"/><path d="M129 118 Q142 128 155 118"/>
-            </g>
-            <g class="yeux-heureux" stroke="#fff" stroke-width="5" fill="none" stroke-linecap="round">
-              <path d="M85 122 Q98 106 111 122"/><path d="M129 122 Q142 106 155 122"/>
-            </g>
-
-            <g class="bouche">
-              <path class="b-neutre" d="M110 148 Q120 153 130 148" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round"/>
-              <path class="b-sourire" d="M104 145 Q120 164 136 145 Z" fill="#fff"/>
-              <path class="b-triste" d="M109 154 Q120 145 131 154" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round"/>
-              <ellipse class="b-o" cx="120" cy="150" rx="5" ry="6" fill="#fff"/>
-              <path class="b-droite" d="M109 151 L131 151" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
-            </g>
-            <ellipse cx="76" cy="152" rx="8" ry="5" fill="#FF8FA3" opacity=".5"/>
-            <ellipse cx="164" cy="152" rx="8" ry="5" fill="#FF8FA3" opacity=".5"/>
-          </g>
-        </g>
-      </svg>
+<body>
+  <header class="barre">
+    <div class="barre-interieure">
+      <a class="marque" href="#vue"><span class="logo" aria-hidden="true">N</span><span>Nkap</span></a>
+      <nav aria-label="Sections">
+        <a href="#vue">Vue d’ensemble</a>
+        <a href="#marches">Marchés</a>
+        <a href="#operations">Opérations</a>
+      </nav>
+      <div class="connexion"><span id="voyant" class="point"></span><span id="connexion">Connexion…</span></div>
     </div>
-
-    <div class="parole">
-      <div class="bulle" aria-live="polite"><span id="message"></span><span class="curseur" aria-hidden="true"></span></div>
-      <div class="reveil-ligne">
-        <span id="reveil">Prochain réveil : <b>…</b></span>
-        <span id="veto">Veto de Claude : actif</span>
+  </header>
+  <main id="vue">
+    <section class="entete" aria-labelledby="titre">
+      <div>
+        <h1 id="titre">Tableau de trading</h1>
+        <p id="contexte">En attente du relevé MT5</p>
       </div>
-    </div>
-  </div>
-  <div class="ndop" aria-hidden="true"></div>
-</section>
-
-<main>
-  <div class="colonne">
-    <section class="panneau capital" aria-labelledby="t-capital">
-      <h2 id="t-capital">Ton capital</h2>
-      <div class="comptes" id="comptes"></div>
-    </section>
-    <section class="panneau" aria-labelledby="t-positions">
-      <h2 id="t-positions">Positions ouvertes</h2>
-      <div id="positions"></div>
-    </section>
-  </div>
-  <section class="panneau fil" aria-labelledby="t-fil">
-    <h2 id="t-fil">Ce que Nkap a fait</h2>
-    <ol id="fil"></ol>
-  </section>
-</main>
-
-<footer>
-  <span id="maj">Mise à jour : …</span>
-  <span>Les stops restent chez le courtier, même si ce PC s'éteint.</span>
-  <span>Laisse ce PC allumé et MT5 ouvert pour que Nkap se réveille seul.</span>
-</footer>
-
-<script>
-(() => {
-  const $ = (id) => document.getElementById(id);
-  const corps = document.body;
-  const nombre = new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-  // Le ciel suit l'humeur : nuit quand il dort, jour quand il travaille, or quand il gagne.
-  const MOMENTS = {
-    sommeil: "nuit", veille: "nuit", reveil: "aube", analyse: "jour", trade: "jour",
-    veto: "crepuscule", gain: "or", content: "or", perte: "crepuscule",
-    attente_fonds: "lavande", erreur: "alerte",
-  };
-  const BULBE = {
-    sommeil: "#6E7CC9", veille: "#7FE7FF", reveil: "#FFD66B", analyse: "#7FE7FF", trade: "#7CF2C4",
-    veto: "#FF6B6B", gain: "#FFD25E", content: "#FFD25E", perte: "#9FB4FF",
-    attente_fonds: "#C6B6FF", erreur: "#FF4D4F",
-  };
-  const ASTUCES = [
-    "Je me réveille seul chaque jour de semaine. Toi, tu peux dormir.",
-    "Les stops acceptés restent chez le courtier. Leur prix d’exécution peut varier.",
-    "Claude peut bloquer un de mes trades. Il ne peut jamais en ouvrir un.",
-    "Je ne force jamais un trade. Pas de signal propre, pas de position.",
-    "Les alertes d’exécution sont disponibles si Telegram est configuré.",
-  ];
-
-  // ---------------------------------------------------------------- étoiles
-  for (let i = 0; i < 46; i++) {
-    const e = document.createElement("span");
-    e.className = "etoile";
-    e.style.left = Math.random() * 100 + "%";
-    e.style.top = Math.random() * 72 + "%";
-    e.style.animationDelay = (Math.random() * 3.6).toFixed(2) + "s";
-    if (Math.random() > .8) { e.style.width = e.style.height = "4px"; }
-    $("etoiles").appendChild(e);
-  }
-
-  // ---------------------------------------------------------------- bulle animée
-  let texteAffiche = "", minuterie = null, bulleForcee = 0;
-  function ecrire(texte) {
-    if (texte === texteAffiche) return;
-    texteAffiche = texte;
-    clearInterval(minuterie);
-    const cible = $("message");
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches) { cible.textContent = texte; return; }
-    let i = 0;
-    cible.textContent = "";
-    minuterie = setInterval(() => {
-      cible.textContent = texte.slice(0, ++i);
-      if (i >= texte.length) clearInterval(minuterie);
-    }, 22);
-  }
-
-  // ---------------------------------------------------------------- affichage
-  const echap = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-  const signe = (v) => (v > 0 ? "+" : "") + nombre.format(v);
-  const classe = (v) => (v > 0 ? "plus" : v < 0 ? "moins" : "");
-  let prochainReveil = null;
-
-  function afficher(etat) {
-    const humeur = etat.humeur || "sommeil";
-    corps.dataset.humeur = humeur;
-    corps.dataset.moment = MOMENTS[humeur] || "nuit";
-    $("bulbe").setAttribute("fill", BULBE[humeur] || "#9FB4FF");
-    $("nom").textContent = etat.nom || "Nkap";
-    document.title = `${etat.nom || "Nkap"} · ${humeur === "sommeil" ? "dort" : "au travail"}`;
-    if (Date.now() > bulleForcee) ecrire(etat.message || "");
-
-    const reel = etat.mode === "ORDRES" && etat.compte_reel;
-    $("mode").textContent = etat.mode !== "ORDRES" ? "Mode test : aucun ordre"
-      : !etat.ordres_autorises ? "Envoi d’ordres indisponible"
-      : reel ? "Ordres réels activés" : "Ordres sur compte démo";
-    $("mode").classList.toggle("reel", !!reel);
-    $("veto").textContent = etat.veto_claude ? "Veto de Claude : actif" : "Veto de Claude : désactivé";
-    prochainReveil = etat.prochain_reveil ? new Date(etat.prochain_reveil) : null;
-    majReveil();
-
-    // capital
-    const comptes = Object.entries(etat.courtiers || {});
-    $("comptes").innerHTML = comptes.length ? comptes.map(([nom, c]) => {
-      const usd = c.devise === "USC" ? `<div class="equivalent">soit ${nombre.format((c.capital || 0) / 100)} $</div>` : "";
-      return `<div>
-        <div class="compte-nom"><span class="voyant ${c.connecte ? "" : "off"}"></span>${echap(nom)}${c.reel ? " (compte réel)" : ""}</div>
-        <div class="montant chiffres">${nombre.format(c.capital || 0)}<small>${echap(c.devise || "")}</small></div>
-        ${usd}
-        <div class="resultats chiffres">
-          <span>Aujourd'hui<strong class="${classe(c.resultat_jour)}">${c.resultat_jour == null ? "—" : signe(c.resultat_jour)}</strong></span>
-          <span>Cette semaine<strong class="${classe(c.resultat_semaine)}">${c.resultat_semaine == null ? "—" : signe(c.resultat_semaine)}</strong></span>
-          <span>Exécutions<strong>${echap(c.trades_semaine ?? "—")}</strong></span>
+      <div id="pilotage" hidden>
+        <div class="choix" role="group" aria-label="Mode d’exécution">
+          <button type="button" data-mode="TEST">Observation</button>
+          <button type="button" data-mode="DEMO">Démo</button>
+          <button type="button" data-mode="REEL">Réel</button>
         </div>
-        <div class="details-compte">${c.connecte ? `Levier 1:${echap(c.levier ?? "?")}, serveur ${echap(c.serveur || "")}` : "Injoignable : vérifie que MT5 est ouvert et connecté."}</div>
-      </div>`;
-    }).join("") : `<div class="equivalent">Aucun compte connecté pour l'instant.</div>`;
+        <p id="message-pilotage" role="status"></p>
+      </div>
+    </section>
+    <div class="barre-etat" aria-label="État du robot">
+      <span id="mode" class="pastille">En attente</span>
+      <span id="fenetre"></span>
+      <span id="veto"></span>
+      <span id="maj" class="maj"></span>
+    </div>
 
-    // positions
-    const positions = comptes.flatMap(([nom, c]) => (c.positions || []).map((p) => ({ ...p, courtier: nom })));
-    $("positions").innerHTML = positions.length ? `<table class="chiffres">
-      <thead><tr><th>Marché</th><th>Sens</th><th class="droite">Lots</th><th class="droite masquable">Entrée</th><th class="droite">Stop</th><th class="droite">Résultat</th></tr></thead>
-      <tbody>${positions.map((p) => `<tr>
-        <td><b>${echap(p.symbole)}</b><br><span class="quand">${echap(p.courtier)}</span></td>
-        <td><span class="sens ${echap(p.sens)}">${echap(p.sens)}</span></td>
-        <td class="droite">${echap(p.volume)}</td>
-        <td class="droite masquable">${echap(p.prix)}</td>
-        <td class="droite">${echap(p.stop || "aucun")}</td>
-        <td class="droite ${classe(p.resultat)}"><b>${signe(p.resultat)}</b></td>
-      </tr>`).join("")}</tbody></table>`
-      : `<p class="vide">Aucune position ouverte. ${echap(etat.nom || "Nkap")} attend un signal propre.</p>`;
+    <section class="indicateurs" aria-label="Indicateurs du compte">
+      <div><span>Capital</span><strong id="capital">—</strong><small id="equivalent"></small></div>
+      <div><span>Résultat du jour</span><strong id="jour">—</strong><small id="semaine"></small></div>
+      <div><span>Positions ouvertes</span><strong id="nombre-positions">—</strong><small id="executions"></small></div>
+      <div><span>Budget au stop / position</span><strong id="budget">—</strong><small id="levier"></small></div>
+    </section>
+    <p id="objectif" class="objectif" hidden></p>
 
-    // fil d'activité
-    const GLYPHES = { trade: "↗", sortie: "↘", gain: "+", perte: "−", veto: "!", erreur: "×", fonds: "$", reveil: "☀", signal: "•", info: "i", rapport: "≡" };
-    const evts = etat.evenements || [];
-    $("fil").innerHTML = evts.length ? evts.slice(0, 18).map((e) => `<li>
-        <span class="puce ${echap(e.type)}" aria-hidden="true">${GLYPHES[e.type] || "•"}</span>
-        <div class="titre">${echap(e.titre)}</div>
-        ${e.detail ? `<div class="detail">${echap(e.detail)}</div>` : ""}
-        <div class="quand">${echap(e.heure)}${e.courtier ? `, ${echap(e.courtier)}` : ""}</div>
-      </li>`).join("") : `<li><span class="puce" aria-hidden="true">•</span><div class="titre">Rien pour l'instant</div><div class="detail">Le premier réveil apparaîtra ici.</div></li>`;
+    <section id="marches" class="grille-marches" aria-label="Marchés surveillés">
+      <article class="panneau graphique">
+        <header class="panneau-entete">
+          <div><h2 id="symbole">Graphique D1</h2><p id="detail-cours">Bougies journalières clôturées</p></div>
+          <div class="choix periode" role="group" aria-label="Historique du graphique">
+            <button type="button" data-periode="20" aria-pressed="true">20 séances</button>
+            <button type="button" data-periode="60" aria-pressed="false">60 séances</button>
+          </div>
+        </header>
+        <div class="zone-cours">
+          <canvas id="cours" role="img" aria-label="Graphique des bougies D1"></canvas>
+          <p id="vide-cours">Les cours s’afficheront après le premier relevé MT5.</p>
+        </div>
+        <p class="lecture-cours" id="lecture-cours"></p>
+      </article>
+      <article class="panneau">
+        <header class="panneau-entete"><div><h2>Liste de suivi</h2><p id="nombre-marches">Marchés MT5</p></div></header>
+        <div id="liste-marches" class="liste-marches"></div>
+      </article>
+    </section>
 
-    $("maj").textContent = etat.maj ? `Mise à jour : ${new Date(etat.maj).toLocaleTimeString("fr-FR", { timeZone: "Africa/Douala", hour: "2-digit", minute: "2-digit", second: "2-digit" })}` : "";
+    <section id="operations" class="grille-operations" aria-label="Opérations du robot">
+      <article class="panneau">
+        <header class="panneau-entete">
+          <div><h2>Journal des opérations</h2><p>Décisions et réponses du courtier</p></div>
+          <label class="filtre"><span class="lecteur">Filtrer le journal</span>
+            <select id="filtre">
+              <option value="all">Toutes les décisions</option>
+              <option value="execution">Exécutions uniquement</option>
+              <option value="blocages">Blocages et veto</option>
+              <option value="test">Passages en test</option>
+            </select>
+          </label>
+        </header>
+        <div class="journal" id="journal"></div>
+      </article>
+      <article class="panneau">
+        <header class="panneau-entete"><div><h2>Positions ouvertes</h2><p>Positions du robot sur le compte actif</p></div></header>
+        <div id="positions" class="positions"></div>
+      </article>
+    </section>
+
+    <section class="panneau" id="fantome" hidden>
+      <header class="panneau-entete"><div><h2>Observation fantôme</h2><p>Comparaison des versions EBSW et ER</p></div></header>
+      <div id="observations" class="positions"></div>
+    </section>
+    <section class="panneau" id="revue-claude">
+      <header class="panneau-entete"><div><h2>Revue Claude</h2><p>Résultats passés et propositions à tester</p></div></header>
+      <div class="vide" id="contenu-revue"></div>
+    </section>
+  </main>
+  <script>
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+const temps = new Intl.DateTimeFormat("fr-FR", {
+  timeZone: "Africa/Douala", hour: "2-digit", minute: "2-digit", second: "2-digit"
+});
+const dateCourte = new Intl.DateTimeFormat("fr-FR", { timeZone: "Africa/Douala", day: "2-digit", month: "2-digit" });
+const format = new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtPrix = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 6, minimumFractionDigits: 2 });
+const argent = (v, devise = "") => Number.isFinite(v) ? [format.format(v), devise].filter(Boolean).join(" ") : "—";
+const gain = (v, devise) => Number.isFinite(v) ? (v > 0 ? "+" : "") + argent(v, devise) : "—";
+const prix = (v) => Number.isFinite(v) ? fmtPrix.format(v) : "—";
+const cleMarche = (m) => m.courtier + "/" + m.marche;
+const signes = { achat: "positif", vente: "negatif" };
+const etatsMode = { TEST: "Observation", DEMO: "Démo", REEL: "Réel" };
+
+let etat = {};
+let jeton = null;
+let marcheChoisi = "";
+let periode = 20;
+let pointeur = null;
+let graphique = null;
+let signatureMarches = "";
+let signatureJournal = "";
+
+function noeud(balise, texte = "", classe = "") {
+  const element = document.createElement(balise);
+  if (texte) element.textContent = texte;
+  if (classe) element.className = classe;
+  return element;
+}
+
+function marcheActif() {
+  const marches = etat.marches || [];
+  return marches.find((m) => cleMarche(m) === marcheChoisi) || marches[0];
+}
+
+function compteActif() {
+  return etat.courtiers?.[marcheActif()?.courtier] || Object.values(etat.courtiers || {})[0];
+}
+
+function montrerCompte() {
+  const c = compteActif();
+  const devise = c?.devise;
+  const t = etat.risque_pct;
+  const a = c?.objectif;
+  const nom = marcheActif()?.courtier || Object.keys(etat.courtiers || {})[0];
+  $("contexte").textContent = c
+    ? [nom, c.reel ? "Compte réel" : "Compte démo", c.serveur].filter(Boolean).join(" · ")
+    : etat.maj ? etat.message || "Aucun compte connecté" : "En attente du relevé MT5";
+  $("capital").textContent = argent(c?.capital, devise);
+  $("equivalent").textContent = Number.isFinite(c?.solde)
+    ? "Solde : " + argent(c.solde, devise) : "";
+  if (devise === "USC" && Number.isFinite(c?.capital)) {
+    $("equivalent").textContent = [$("equivalent").textContent, "Capital : " + argent(c.capital / 100, "USD")]
+      .filter(Boolean).join(" · ");
   }
+  $("jour").textContent = gain(c?.resultat_jour, devise);
+  $("jour").className = c?.resultat_jour > 0 ? "positif" : c?.resultat_jour < 0 ? "negatif" : "";
+  $("semaine").textContent = c ? "Semaine : " + gain(c.resultat_semaine, devise) : "";
+  const positions = c?.positions || [];
+  $("nombre-positions").textContent = c ? String(positions.length) : "—";
+  const latent = positions.reduce((somme, p) => somme + p.resultat, 0);
+  $("executions").textContent = c ? [
+    "Latent : " + gain(latent, devise),
+    Number.isFinite(c.transactions) ? c.transactions + " exécution(s) du jour" : ""
+  ].filter(Boolean).join(" · ") : "";
+  $("budget").textContent = argent(c?.capital * t / 100, devise);
+  $("levier").textContent = [Number.isFinite(t) ? format.format(t) + " % du capital" : "",
+    Number.isFinite(c?.marge_libre) ? "Marge libre : " + argent(c.marge_libre, devise) : ""].filter(Boolean).join(" · ");
+  $("objectif").hidden = !a;
+  $("objectif").textContent = a
+    ? [argent(a.solde_usd, "USD") + " / " + argent(a.cible_usd, "USD"),
+      "échéance " + a.date_fin + " (Douala)", a.motif].filter(Boolean).join(" · ") : "";
 
-  function majReveil() {
-    if (!prochainReveil || isNaN(prochainReveil)) { $("reveil").innerHTML = "Prochain réveil : <b>à définir</b>"; return; }
-    const ms = prochainReveil - Date.now();
-    const heure = prochainReveil.toLocaleTimeString("fr-FR", { timeZone: "Africa/Douala", hour: "2-digit", minute: "2-digit" });
-    let dans;
-    if (ms <= 0) dans = "maintenant";
-    else {
-      const h = Math.floor(ms / 3.6e6), m = Math.floor((ms % 3.6e6) / 6e4);
-      dans = h >= 24 ? `dans ${Math.floor(h / 24)} j ${h % 24} h` : h ? `dans ${h} h ${String(m).padStart(2, "0")}` : `dans ${m} min`;
-    }
-    $("reveil").innerHTML = `Prochain réveil : <b>${new Intl.DateTimeFormat("fr-FR", { timeZone: "Africa/Douala", weekday: "long" }).format(prochainReveil)} à ${heure}</b> (${dans})`;
+  const bloc = $("positions");
+  if (!positions.length) {
+    bloc.replaceChildren(noeud("p", c ? "Aucune position ouverte du robot." : "Données de position indisponibles.", "vide"));
+    return;
   }
-  setInterval(majReveil, 30000);
+  const table = noeud("table", "", "chiffres");
+  const titres = table.createTHead().insertRow();
+  ["Marché / ticket", "Sens", "Lots", "Entrée", "Stop", "Objectif (TP)", "Latent"].forEach((titre) => titres.append(noeud("th", titre)));
+  const corps = table.createTBody();
+  for (const p of positions) {
+    const ligne = corps.insertRow();
+    [p.symbole + (p.ticket != null ? " #" + p.ticket : ""), p.sens, p.volume,
+      prix(p.prix), p.stop > 0 ? prix(p.stop) : "—", p.objectif > 0 ? prix(p.objectif) : "—", gain(p.resultat, devise)].forEach((v, i) => {
+      const cellule = ligne.insertCell();
+      cellule.textContent = v ?? "—";
+      if (i === 6) cellule.className = p.resultat > 0 ? "positif" : p.resultat < 0 ? "negatif" : "";
+    });
+  }
+  bloc.replaceChildren(table);
+}
 
-  // ---------------------------------------------------------------- regard qui suit la souris
-  const zone = $("zone");
-  window.addEventListener("pointermove", (ev) => {
-    const r = zone.getBoundingClientRect();
-    const dx = ev.clientX - (r.left + r.width / 2), dy = ev.clientY - (r.top + r.height * .42);
-    const d = Math.hypot(dx, dy) || 1, f = Math.min(1, d / 260);
-    zone.style.setProperty("--gx", ((dx / d) * 5 * f).toFixed(1) + "px");
-    zone.style.setProperty("--gy", ((dy / d) * 4 * f).toFixed(1) + "px");
+function montrerMarches() {
+  const marches = etat.marches || [];
+  const actif = marcheActif();
+  marcheChoisi = actif ? cleMarche(actif) : "";
+  $("nombre-marches").textContent = marches.length ? marches.length + " instruments · Dernier bid MT5" : "Marchés MT5";
+  const signature = JSON.stringify([marcheChoisi, marches.map((m) => [cleMarche(m), m.bid, m.statut])]);
+  if (signature === signatureMarches) return;
+  signatureMarches = signature;
+  const conteneur = $("liste-marches");
+  const focus = conteneur.contains(document.activeElement) ? document.activeElement.dataset.marche : null;
+  conteneur.replaceChildren(...(marches.length ? marches.map((m) => {
+    const cle = cleMarche(m);
+    const bouton = noeud("button", "", "marche");
+    bouton.type = "button";
+    bouton.dataset.marche = cle;
+    bouton.setAttribute("aria-pressed", String(cle === marcheChoisi));
+    const label = noeud("span");
+    label.append(noeud("strong", m.symbole || m.marche), noeud("small", m.courtier || ""));
+    const dernier = m.bougies?.at(-1);
+    const montant = noeud("span", prix(m.bid ?? dernier?.[4]), "chiffres");
+    if (!Number.isFinite(m.bid) && dernier) montant.append(noeud("small", "Clôture"));
+    const signal = noeud("span", m.statut === "achat" ? "Achat" : m.statut === "vente" ? "Vente" : m.statut || "—", "signal");
+    signal.dataset.ton = signes[m.statut] || "";
+    bouton.append(label, montant, signal);
+    bouton.addEventListener("click", () => {
+      marcheChoisi = cle;
+      pointeur = null;
+      montrerMarches();
+      montrerCompte();
+      dessiner();
+    });
+    return bouton;
+  }) : [noeud("p", "En attente des symboles MT5.", "vide")]));
+  if (focus) [...conteneur.querySelectorAll("button")].find((b) => b.dataset.marche === focus)?.focus();
+}
+
+function classification(e) {
+  const resultat = (e.resultat || "").toLowerCase();
+  const action = (e.action || "").toLowerCase();
+  if ((action === "entrée" || action === "sortie") && resultat === "ok") {
+    return [action === "entrée" ? "Entrée exécutée" : "Sortie exécutée", "positif", "execution"];
+  }
+  if (e.mode === "TEST" && (action === "entrée" || action === "sortie") && resultat === "non envoyé") {
+    return ["Simulation · non envoyé", "", "test"];
+  }
+  if (action === "veto" || e.type === "veto") return ["Veto Claude", "attention", "blocages"];
+  if (action === "refus taille") return ["Risque hors limite", "attention", "blocages"];
+  if (action === "objectif") return ["Arrêt objectif", "attention", "blocages"];
+  if (resultat === "non envoyé") return ["Ordre non envoyé", "negatif", "blocages"];
+  return [action || "Décision", "", e.mode === "TEST" ? "test" : "info"];
+}
+
+function montrerJournal() {
+  const filtre = $("filtre").value;
+  const evenements = etat.evenements || [];
+  const signature = JSON.stringify([filtre, evenements]);
+  if (signature === signatureJournal) return;
+  signatureJournal = signature;
+  const journal = $("journal");
+  const ouverts = new Set([...journal.querySelectorAll("details[open]")].map((x) => x.dataset.cle));
+  const lignes = evenements.map((e, i) => [e, i, classification(e)]).filter(([e, , categorie]) =>
+    filtre === "all" || (filtre === "test" ? e.mode === "TEST" : categorie[2] === filtre));
+  if (!lignes.length) {
+    journal.replaceChildren(noeud("p", filtre === "execution" ? "Aucune exécution dans le journal récent." : "Aucune décision à afficher.", "vide"));
+    return;
+  }
+  journal.replaceChildren(...lignes.map(([e, i, [libelle, ton]]) => {
+    const details = noeud("details");
+    details.dataset.cle = [e.heure, e.titre, e.detail, i].join("|");
+    details.open = ouverts.has(details.dataset.cle);
+    const resume = noeud("summary");
+    const instant = typeof e.heure === "string" && e.heure
+      ? new Date(e.heure.includes("T") ? e.heure : e.heure.replace(" ", "T") + ":00Z") : null;
+    const heure = instant && Number.isFinite(instant.valueOf())
+      ? dateCourte.format(instant) + " " + temps.format(instant).slice(0, 5) : e.heure || "—";
+    const horodatage = noeud("time", heure);
+    horodatage.title = "Heure de Douala";
+    const marche = noeud("strong", e.symbole || e.courtier || "—");
+    const statut = noeud("span", libelle, "pastille");
+    statut.dataset.ton = ton;
+    resume.append(horodatage, marche, statut, noeud("span", e.mode || "—", "type-mode"));
+    details.append(resume, noeud("p", [e.courtier, e.detail || e.titre].filter(Boolean).join(" · "), "detail"));
+    return details;
+  }));
+}
+
+function dessiner() {
+  const m = marcheActif();
+  const canvas = $("cours");
+  const ctx = canvas.getContext("2d");
+  const ratio = window.devicePixelRatio || 1;
+  const { width, height } = canvas.getBoundingClientRect();
+  canvas.width = Math.round(width * ratio);
+  canvas.height = Math.round(height * ratio);
+  ctx.scale(ratio, ratio);
+  const bougies = (m?.bougies || []).slice(-periode);
+  $("symbole").textContent = m ? (m.symbole || m.marche) + " · D1" : "Graphique D1";
+  const tick = Number.isFinite(m?.bid) && Number.isFinite(m?.ask)
+    ? "Bid " + prix(m.bid) + "  /  Ask " + prix(m.ask) : "";
+  const heureTick = Number.isFinite(m?.tick_utc) && m.tick_utc > 0
+    ? " Dernier tick " + dateCourte.format(new Date(m.tick_utc * 1000)) + " "
+      + temps.format(new Date(m.tick_utc * 1000)) : "";
+  $("detail-cours").textContent = tick ? tick + " ·" + (heureTick || " cotation MT5") : "Bougies journalières clôturées";
+  $("vide-cours").hidden = bougies.length > 0;
+  $("vide-cours").textContent = m ? "Aucune bougie reçue pour cet instrument." : "Les cours s’afficheront après le premier relevé MT5.";
+  $("lecture-cours").textContent = "";
+  graphique = null;
+  if (!bougies.length || width < 120) return;
+
+  const gauche = 16, haut = 16, droite = width - 70, bas = height - 31;
+  const cols = Math.max(1, bougies.length);
+  const pas = (droite - gauche) / cols;
+  const largeurBougie = Math.max(1, Math.min(11, pas * .55));
+  const maxi = Math.max(...bougies.map((b) => b[2]));
+  const mini = Math.min(...bougies.map((b) => b[3]));
+  const marge = (maxi - mini) * .09 || maxi * .005;
+  const maximum = maxi + marge, minimum = mini - marge;
+  const y = (v) => haut + (maximum - v) * (bas - haut) / (maximum - minimum);
+  const x = (i) => gauche + (i + .5) * pas;
+  graphique = { gauche, pas, nombre: cols };
+
+  ctx.font = "11px Segoe UI, sans-serif";
+  ctx.textBaseline = "middle";
+  for (let i = 0; i <= 5; i++) {
+    const niveau = haut + (bas - haut) * i / 5;
+    ctx.strokeStyle = "#28323b";
+    ctx.beginPath(); ctx.moveTo(gauche, niveau); ctx.lineTo(droite, niveau); ctx.stroke();
+    ctx.fillStyle = "#a8b4bf";
+    ctx.fillText(prix(maximum - (maximum - minimum) * i / 5), droite + 8, niveau);
+  }
+  const actifs = Math.min(width < 440 ? 3 : 6, cols);
+  for (let j = 0; j < actifs; j++) {
+    const i = Math.round(j * (cols - 1) / Math.max(1, actifs - 1));
+    const label = bougies[i][0].slice(5).split("-").reverse().join("/");
+    ctx.fillText(label, Math.max(gauche, x(i) - 14), bas + 16);
+  }
+  bougies.forEach(([date, ouverture, hautCours, basCours, cloture], i) => {
+    const couleur = cloture >= ouverture ? "#68d3a4" : "#ef8980";
+    ctx.strokeStyle = couleur;
+    ctx.fillStyle = couleur;
+    ctx.beginPath(); ctx.moveTo(x(i), y(hautCours)); ctx.lineTo(x(i), y(basCours)); ctx.stroke();
+    ctx.fillRect(x(i) - largeurBougie / 2, Math.min(y(ouverture), y(cloture)),
+      largeurBougie, Math.max(1, Math.abs(y(ouverture) - y(cloture))));
   });
-
-  // ---------------------------------------------------------------- clic : il réagit
-  let astuce = 0;
-  function reagir() {
-    zone.classList.remove("hop"); void zone.offsetWidth; zone.classList.add("hop");
-    bulleForcee = Date.now() + 6000;
-    ecrire(ASTUCES[astuce++ % ASTUCES.length]);
-    setTimeout(() => { texteAffiche = ""; if (dernierEtat) afficher(dernierEtat); }, 6100);
+  const indice = pointeur == null ? cols - 1 : Math.min(cols - 1, pointeur);
+  if (pointeur != null) {
+    ctx.strokeStyle = "#a8b4bf";
+    ctx.setLineDash([3, 4]);
+    ctx.beginPath(); ctx.moveTo(x(indice), haut); ctx.lineTo(x(indice), bas); ctx.stroke();
+    ctx.setLineDash([]);
   }
-  zone.addEventListener("click", reagir);
-  zone.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); reagir(); } });
+  const [date, ouverture, hautCours, basCours, cloture] = bougies[indice];
+  $("lecture-cours").textContent = date + " · O " + prix(ouverture) + " · H " + prix(hautCours)
+    + " · B " + prix(basCours) + " · C " + prix(cloture);
+}
 
-  // ---------------------------------------------------------------- état local
-  let dernierEtat = null;
-  async function rafraichir() {
-    try {
-      const r = await fetch("/api/etat", { cache: "no-store" });
-      if (!r.ok) throw new Error(r.status);
-      const etat = await r.json();
-      if (!etat.maj) throw new Error("En attente du premier rapport");
-      if (Date.now() - Date.parse(etat.maj) > 180000) {
-        throw new Error("Rapport ancien");
-      }
-      dernierEtat = etat;
-      afficher(etat);
-    } catch {
-      dernierEtat = {
-        nom: "Nkap", mode: "TEST", humeur: "erreur",
-        message: "En attente de données récentes. Vérifie la tâche Nkap et la connexion MT5.",
-      };
-      afficher(dernierEtat);
-      $("mode").textContent = "État du bot indisponible";
-      $("veto").textContent = "Veto de Claude : état indisponible";
+$("cours").addEventListener("pointermove", (e) => {
+  if (!graphique) return;
+  const indice = Math.floor((e.offsetX - graphique.gauche) / graphique.pas);
+  const nouveau = indice >= 0 && indice < graphique.nombre ? indice : null;
+  if (nouveau !== pointeur) { pointeur = nouveau; dessiner(); }
+});
+$("cours").addEventListener("pointerleave", () => { pointeur = null; dessiner(); });
+new ResizeObserver(dessiner).observe($("cours"));
+for (const bouton of document.querySelectorAll("[data-periode]")) {
+  bouton.addEventListener("click", () => {
+    periode = Number(bouton.dataset.periode);
+    pointeur = null;
+    document.querySelectorAll("[data-periode]").forEach((b) => b.setAttribute("aria-pressed", String(b === bouton)));
+    dessiner();
+  });
+}
+$("filtre").addEventListener("change", montrerJournal);
+
+function afficher(frais) {
+  const connectes = Object.values(etat.courtiers || {}).some((c) => c.connecte);
+  $("voyant").dataset.etat = frais && connectes ? "ok" : "off";
+  $("connexion").textContent = frais ? connectes ? "MT5 connecté" : "MT5 en attente" : "Relevé indisponible";
+  const reel = frais && etat.mode === "ORDRES" && etat.compte_reel && etat.ordres_autorises;
+  $("mode").textContent = !frais ? "État non confirmé" : reel ? "Ordres réels activés"
+    : etat.mode === "ORDRES" ? etat.ordres_autorises ? "Démo" : "Envoi indisponible" : "Observation";
+  $("mode").dataset.ton = reel ? "negatif" : frais ? "" : "attention";
+  $("fenetre").textContent = frais && typeof etat.entrees_ouvertes === "boolean"
+    ? "Entrées " + (etat.entrees_ouvertes ? "ouvertes" : "fermées") + " · " + etat.heure_entree + "–" + etat.heure_limite
+    : "";
+  $("veto").textContent = frais ? "Claude : " + (etat.revue_claude_active ? "revue consultative" : "revue inactive") : "";
+  const revue = etat.revue_claude;
+  const blocRevue = $("contenu-revue");
+  const lignesRevue = [];
+  if (revue?.statut === "disponible") {
+    lignesRevue.push(noeud("p", revue.jour + " · " + revue.resume));
+    for (const [titre, elements] of [["Propositions", revue.propositions], ["Alertes", revue.alertes]]) {
+      if (!elements?.length) continue;
+      const liste = noeud("ul");
+      liste.append(...elements.map((texte) => noeud("li", texte)));
+      lignesRevue.push(noeud("h3", titre), liste);
     }
+  } else {
+    lignesRevue.push(noeud("p", revue?.statut === "indisponible"
+      ? "Revue indisponible · " + revue.erreur : revue?.statut === "en cours"
+      ? "Revue en cours…" : "En attente d’une revue des résultats."));
   }
+  blocRevue.replaceChildren(...lignesRevue);
+  $("maj").textContent = etat.maj ? "Dernier relevé " + temps.format(new Date(etat.maj)) + " · Douala" : "";
+  montrerMarches();
+  montrerCompte();
+  montrerJournal();
+  dessiner();
+  $("fantome").hidden = !Array.isArray(etat.fantome);
+  $("observations").replaceChildren(...(etat.fantome || []).map((o) =>
+    noeud("p", [o.marche, o.version, o.signal || "Aucun signal", o.module].filter(Boolean).join(" · "), "vide")
+  ));
+  if (!frais && etat.maj) $("contexte").textContent += " · Données du dernier relevé";
+}
 
-  rafraichir();
-  setInterval(rafraichir, 4000);
-})();
-</script>
+async function rafraichir() {
+  try {
+    const reponse = await fetch("/api/etat", { cache: "no-store" });
+    if (!reponse.ok) throw new Error();
+    etat = await reponse.json();
+    const date = Date.parse(etat.maj);
+    afficher(Number.isFinite(date) && Date.now() - date < 45000);
+  } catch {
+    afficher(false);
+  }
+}
+
+async function lirePilotage() {
+  try {
+    const reponse = await fetch("/api/pilotage", { cache: "no-store" });
+    if (!reponse.ok) throw new Error();
+    const p = await reponse.json();
+    jeton = p.jeton;
+    $("pilotage").hidden = false;
+    document.querySelectorAll("[data-mode]").forEach((b) =>
+      b.setAttribute("aria-pressed", String(b.dataset.mode === p.applique))
+    );
+    if (p.demande !== p.applique) $("message-pilotage").textContent = "Passage en " + etatsMode[p.demande] + " en attente.";
+    return p;
+  } catch {
+    jeton = null;
+    $("pilotage").hidden = true;
+    return null;
+  }
+}
+
+for (const bouton of document.querySelectorAll("[data-mode]")) {
+  bouton.addEventListener("click", async () => {
+    const p = await lirePilotage();
+    if (!p) return;
+    const mode = bouton.dataset.mode;
+    if (mode === p.applique && mode === p.demande) {
+      $("message-pilotage").textContent = "Mode " + etatsMode[mode] + " déjà appliqué.";
+      return;
+    }
+    const confirmerReel = mode === "REEL" && p.reel_disponible &&
+      window.confirm("Passer Nkap en réel sur HFM ? Le robot pourra engager ton argent.");
+    if (mode === "REEL" && p.reel_disponible && !confirmerReel) return;
+    const boutons = [...document.querySelectorAll("[data-mode]")];
+    boutons.forEach((b) => { b.disabled = true; });
+    try {
+      const reponse = await fetch("/api/pilotage", {
+        method: "POST", headers: { "Content-Type": "application/json", "X-Nkap-Token": jeton },
+        body: JSON.stringify({ mode, confirmer_reel: confirmerReel })
+      });
+      const choix = await reponse.json();
+      $("message-pilotage").textContent = choix.message;
+      await lirePilotage();
+    } catch {
+      $("message-pilotage").textContent = "Le service local ne répond pas.";
+    } finally {
+      boutons.forEach((b) => { b.disabled = false; });
+    }
+  });
+}
+
+rafraichir();
+lirePilotage();
+setInterval(rafraichir, 4000);
+setInterval(lirePilotage, 4000);
+  </script>
 </body>
 </html>

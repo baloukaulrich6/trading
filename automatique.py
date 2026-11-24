@@ -2,11 +2,12 @@
 import csv
 import json
 import logging
+from math import isfinite
 import os
 import sqlite3
 from collections import deque
 from contextlib import closing
-from datetime import datetime, time, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from time import sleep
 
@@ -14,31 +15,18 @@ import MetaTrader5 as mt5
 
 import config as C
 import notifications
+from horaires_nkap import fenetre_entree, horaires, prochain_reveil
+from objectif_hfm import Objectif, SuiviObjectif
+from pilotage_local import Pilotage
 import rapport
 import robot
+from revue_claude import RevueQuotidienne
 import tableau_de_bord
+from univers_marches import marches
 
 BASE = Path(__file__).resolve().parent
 ETAT = BASE / "automatique_etat.json"
-INTERVALLE = 60
-
-
-def fenetre_entree(maintenant):
-    debut = time.fromisoformat(os.getenv("HEURE_EXECUTION", "09:15"))
-    fin = time.fromisoformat(os.getenv("HEURE_LIMITE", "21:00"))
-    if debut >= fin:
-        raise ValueError("HEURE_EXECUTION doit précéder HEURE_LIMITE.")
-    local = maintenant.astimezone(rapport.DOUALA)
-    return local.weekday() < 5 and debut <= local.time() < fin
-
-
-def prochain_reveil(maintenant):
-    local = maintenant.astimezone(rapport.DOUALA)
-    debut = time.fromisoformat(os.getenv("HEURE_EXECUTION", "09:15"))
-    reveil = datetime.combine(local.date(), debut, rapport.DOUALA)
-    while reveil <= local or reveil.weekday() >= 5:
-        reveil += timedelta(days=1)
-    return reveil.isoformat()
+INTERVALLE = 15
 
 
 def activite():
@@ -50,6 +38,8 @@ def activite():
     types = {"entrée": "trade", "sortie": "sortie", "veto": "veto", "refus taille": "signal"}
     return [
         {"heure": ligne.get("date_utc", ""), "courtier": ligne.get("courtier", ""),
+         "symbole": ligne.get("symbole", ""), "mode": ligne.get("mode", ""),
+         "action": ligne.get("action", ""), "resultat": ligne.get("resultat", ""),
          "type": types.get(ligne.get("action"), "info"),
          "titre": f"{ligne.get('symbole', '')} · {ligne.get('action', '')} · {ligne.get('resultat', '')}",
          "detail": ligne.get("raison", "")}
@@ -69,14 +59,68 @@ class Planificateur:
             connexion.execute("CREATE TABLE IF NOT EXISTS messages (cle TEXT PRIMARY KEY)")
         self.rapports = []
         self.observations = {}
+        self.marches = {}
+        self.revue_claude = RevueQuotidienne(BASE / "automatique.sqlite3")
+        self.clotures_revue = []
+        objectif = Objectif.configurer()
+        self.suivi_objectif = SuiviObjectif(BASE / "automatique.sqlite3", objectif) if objectif else None
         self.demarrage_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+        self.observations_fantomes = []
+        self.fantome = None
+        self.versions_fantomes = []
+        if os.getenv("NKAP_FANTOME", "non").strip().lower() == "oui":
+            if C.MODE != "TEST":
+                raise ValueError("La collecte NKAP_FANTOME demande MODE=TEST.")
+            from nkap.configuration import Parametres, charger_config
+            from nkap.service.fantome import Fantome
+
+            dossier = BASE / "observations_nkap"
+            dossier.mkdir(exist_ok=True)
+            self.fantome = Fantome(dossier / "fantome.sqlite3")
+            _, champion, _ = charger_config(BASE / "config")
+            autre = "er" if champion.regime == "ebsw" else "ebsw"
+            self.versions_fantomes = [
+                champion, Parametres.model_validate({**champion.model_dump(), "version": f"fantome-{autre}",
+                                                    "regime": autre}),
+            ]
+
+    def observer(self, courtier, marche, bougies):
+        if self.fantome is None:
+            return
+        donnees = bougies.sort_index()
+        donnees.index = donnees.index.tz_localize("UTC")
+        for p in self.versions_fantomes:
+            self.observations_fantomes.append(
+                self.fantome.observer(courtier.nom, marche, donnees, p, datetime.now(timezone.utc))
+            )
 
     def entrees_permises(self):
         return fenetre_entree(datetime.now(timezone.utc))
 
+    def objectif_compte(self, courtier, compte):
+        if self.suivi_objectif is None or courtier.nom != "HFM" or not courtier.est_compte_reel():
+            return None
+        return self.suivi_objectif.verifier(courtier, compte)
+
+    def noter_marche(self, courtier, base, symbole, ligne, *, fantome=False, donnees=None):
+        signal = robot.S.signal_entree(ligne) if ligne is not None else None
+        bougies = []
+        if donnees is not None:
+            series = donnees[["open", "high", "low", "close"]].tail(60)
+            for date, *prix in series.itertuples(name=None):
+                if all(isfinite(p) and p > 0 for p in prix):
+                    bougies.append([date.strftime("%Y-%m-%d"), *map(float, prix)])
+        self.marches[(courtier.nom, courtier.login, base)] = {
+            "courtier": courtier.nom, "marche": base, "symbole": symbole,
+            "bougie": ligne.name.isoformat() if ligne is not None else None,
+            "bougies": bougies,
+            "statut": (signal["sens"] if signal else "Aucun signal D1") if ligne is not None
+            else "Observation fantôme" if fantome else "Symbole indisponible",
+        }
+
     def nouveau(self, courtier, symbole, bougie, solde, positions):
         cle = (courtier.serveur.casefold(), courtier.login, symbole)
-        observation = (bougie, solde, tuple(p.ticket for p in positions), self.entrees_permises())
+        observation = (bougie, solde, tuple(p.ticket for p in positions), C.MODE, self.entrees_permises())
         precedent = self.observations.get(cle)
         self.observations[cle] = observation
         return observation != precedent
@@ -96,18 +140,38 @@ class Planificateur:
         fin = maintenant + timedelta(seconds=1)
         transactions = mt5.history_deals_get(debut, fin)
         net, nombre = rapport.bilan(transactions, C.MAGIC)
-        semaine, nombre_semaine = rapport.bilan(
-            mt5.history_deals_get(rapport.debut_semaine(maintenant), fin), C.MAGIC
-        )
+        transactions_semaine = mt5.history_deals_get(rapport.debut_semaine(maintenant), fin)
+        semaine, nombre_semaine = rapport.bilan(transactions_semaine, C.MAGIC)
+        sorties = tuple(getattr(mt5, f"DEAL_ENTRY_{nom}", None) for nom in ("OUT", "OUT_BY", "INOUT"))
+        clotures = [d for d in (transactions_semaine or ())
+                    if d.magic == C.MAGIC and getattr(d, "entry", -1) in sorties]
+        self.clotures_revue.extend({
+            "courtier": courtier.nom, "symbole": d.symbol,
+            "date_utc": datetime.fromtimestamp(d.time, timezone.utc).isoformat(),
+            "net": rapport.montant_transaction(d), "devise": compte.currency,
+            "compte_reel": courtier.est_compte_reel(),
+        } for d in clotures[-15:])
         positions = courtier.positions()
+        releves = []
+        for base in marches(courtier.nom):
+            marche = self.marches.get((courtier.nom, courtier.login, base),
+                                      {"courtier": courtier.nom, "marche": base, "statut": "Analyse en attente"})
+            symbole = marche.get("symbole")
+            tick = mt5.symbol_info_tick(symbole) if symbole else None
+            if tick is not None and all(isfinite(p) and p > 0 for p in (tick.bid, tick.ask)):
+                marche = {**marche, "bid": tick.bid, "ask": tick.ask, "tick_utc": getattr(tick, "time", None)}
+            releves.append(marche)
         self.rapports.append({
             "courtier": courtier.nom,
             "devise": compte.currency,
             "capital": compte.equity,
+            "solde": getattr(compte, "balance", None),
+            "marge_libre": getattr(compte, "margin_free", None),
             "positions": len(positions),
             "positions_detail": [
-                {"symbole": p.symbol, "sens": "achat" if p.type == mt5.POSITION_TYPE_BUY else "vente",
-                 "volume": p.volume, "prix": p.price_open, "stop": p.sl, "resultat": p.profit + p.swap}
+                {"ticket": p.ticket, "symbole": p.symbol, "sens": "achat" if p.type == mt5.POSITION_TYPE_BUY else "vente",
+                 "volume": p.volume, "prix": p.price_open, "stop": p.sl, "objectif": getattr(p, "tp", 0),
+                 "resultat": p.profit + p.swap}
                 for p in positions
             ],
             "serveur": courtier.serveur,
@@ -118,6 +182,8 @@ class Planificateur:
             "transactions": nombre,
             "resultat_semaine": semaine,
             "transactions_semaine": nombre_semaine,
+            "objectif": self.objectif_compte(courtier, compte),
+            "marches": releves,
         })
         if not notifications.active():
             return
@@ -166,10 +232,25 @@ class Planificateur:
         temporaire = ETAT.with_suffix(".tmp")
         temporaire.write_text(json.dumps(etat, ensure_ascii=False), encoding="utf-8")
         temporaire.replace(ETAT)
+        heure_entree, heure_limite = horaires()
+        evenements = activite()
+        self.revue_claude.demarrer(datetime.fromisoformat(etat["heure"]), {
+            "comptes": [{k: r[k] for k in ("courtier", "devise", "reel", "resultat",
+                                         "resultat_semaine", "transactions_semaine")} for r in self.rapports],
+            "clotures": self.clotures_revue[-20:],
+            "decisions": [{**e, "detail": (e["detail"] or "")[:300]} for e in evenements],
+            "note": "Le journal ancien peut contenir plusieurs modes ou comptes.",
+        })
         tableau_de_bord.INSTANTANE = json.dumps({
             "nom": os.getenv("NOM_MASCOTTE", "Nkap"),
-            "mode": C.MODE, "veto_claude": C.CLAUDE_ACTIF, "maj": etat["heure"],
+            "mode": C.MODE, "maj": etat["heure"],
+            "revue_claude_active": bool(C.CLAUDE_ACTIF and C.ANTHROPIC_API_KEY),
+            "revue_claude": self.revue_claude.derniere(),
             "message": statut, "humeur": "veille" if self.rapports else "erreur",
+            "entrees_ouvertes": self.entrees_permises(),
+            "risque_pct": C.RISQUE_PAR_TRADE * 100,
+            "heure_entree": heure_entree,
+            "heure_limite": "minuit" if heure_limite == "00:00" else heure_limite,
             "prochain_reveil": prochain_reveil(datetime.now(timezone.utc)),
             "compte_reel": any(r["reel"] for r in self.rapports),
             "ordres_autorises": any(r["ordres_autorises"] for r in self.rapports),
@@ -178,8 +259,12 @@ class Planificateur:
                                 "resultat_jour": r["resultat"], "trades_semaine": r["transactions_semaine"]}
                 for r in self.rapports
             },
-            "evenements": activite(),
+            "evenements": evenements,
+            "marches": [m for r in self.rapports for m in r["marches"]],
+            "fantome": self.observations_fantomes if self.fantome is not None and C.MODE == "TEST" else None,
         }, ensure_ascii=False)
+        if self.fantome is not None:
+            self.fantome.exporter(BASE / "observations_nkap" / "rapport.csv")
         dossier = BASE / "rapports_automatiques"
         dossier.mkdir(exist_ok=True)
         date = datetime.fromisoformat(etat["heure"]).astimezone(rapport.DOUALA).date()
@@ -192,14 +277,37 @@ class Planificateur:
 def main():
     fenetre_entree(datetime.now(timezone.utc))
     robot.configurer_log()
+    pilotage = None
+    if os.getenv("NKAP_CHOIX_MODE", "non").strip().lower() == "oui":
+        pilotage = Pilotage(next((c for c in C.COURTIERS if c["nom"] == "HFM" and c["actif"]), None))
+        reel_au_demarrage = C.MODE == "ORDRES" and os.getenv(
+            "COMPTE_REEL_CONFIRME", ""
+        ).strip().lower() == "oui"
+        if reel_au_demarrage:
+            code, motif = pilotage.demander("REEL", confirmer_reel=True)
+            if code != 200:
+                raise ValueError(motif)
+        else:
+            C.MODE = "TEST"
+    tableau_de_bord.PILOTAGE = pilotage
+    planificateur = Planificateur()
     port = int(os.getenv("PORT_INTERFACE", "8765"))
     if not tableau_de_bord.demarrer(port):
         logging.getLogger("robot").error("Port local %s occupé. Nkap ne démarre pas.", port)
         raise SystemExit(1)
-    planificateur = Planificateur()
-    actifs = [conf for conf in C.COURTIERS if conf["actif"]]
+    configurations = [conf for conf in C.COURTIERS if conf["actif"]]
     while True:
+        actifs = configurations
+        if pilotage is not None:
+            mode = pilotage.appliquer()
+            C.MODE = "ORDRES" if mode in ("DEMO", "REEL") else "TEST"
+            if mode == "DEMO" and pilotage.demo is not None:
+                actifs = [pilotage.demo]
+            elif mode == "REEL" and pilotage.reel is not None:
+                actifs = [pilotage.reel]
         planificateur.rapports.clear()
+        planificateur.clotures_revue.clear()
+        planificateur.observations_fantomes.clear()
         erreurs = []
         for conf in actifs:
             try:
@@ -212,7 +320,10 @@ def main():
             planificateur.publier(" | ".join(erreurs) or statut)
         except OSError:
             logging.getLogger("robot").exception("Publication du rapport impossible")
-        sleep(INTERVALLE)
+        if pilotage is None:
+            sleep(INTERVALLE)
+        else:
+            pilotage.reveil.wait(INTERVALLE)
 
 
 if __name__ == "__main__":

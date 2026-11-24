@@ -1,0 +1,25 @@
+marches:
+  - symbole: EURUSD
+    categorie: forex
+    alias: {HFM: [EURUSDc], Exness: [EURUSDm, EURUSD]}
+  - symbole: GBPUSD
+    categorie: forex
+    alias: {HFM: [GBPUSDc], Exness: [GBPUSDm, GBPUSD]}
+  - symbole: USDJPY
+    categorie: forex
+    alias: {HFM: [USDJPYc], Exness: [USDJPYm, USDJPY]}
+  - symbole: AUDUSD
+    categorie: forex
+    alias: {HFM: [AUDUSDc], Exness: [AUDUSDm, AUDUSD]}
+  - symbole: USDCHF
+    categorie: forex
+    alias: {HFM: [USDCHFc], Exness: [USDCHFm, USDCHF]}
+  - symbole: XAUUSD
+    categorie: metal
+    alias: {HFM: [XAUUSDc], Exness: [XAUUSDm, XAUUSD]}
+  - symbole: NAS100
+    categorie: indice
+    alias: {HFM: [NAS100], Exness: [USTEC, USTECm, NAS100]}
+  - symbole: BTCUSD
+    categorie: crypto
+    alias: {HFM: [BTCUSD], Exness: [BTCUSDm, BTCUSD]}

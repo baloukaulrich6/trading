@@ -93,6 +93,7 @@ def lancer(historiques: dict[str, tuple[pd.DataFrame, float]]) -> None:
 
 def main() -> None:
     from courtier import Courtier
+    from univers_marches import marches
 
     conf = next((c for c in C.COURTIERS if c["actif"]), None)
     if conf is None:
@@ -102,7 +103,7 @@ def main() -> None:
     courtier.connecter()
     try:
         historiques = {}
-        for base in C.SYMBOLES:
+        for base in marches(courtier.nom):
             symbole = courtier.trouver_symbole(base)
             if symbole is None:
                 print(f"{base} introuvable chez {courtier.nom}")
