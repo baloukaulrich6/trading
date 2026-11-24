@@ -108,7 +108,10 @@ class SMC:
     def entree(self, marche: str, ligne: pd.Series, p: Parametres) -> Signal | None:
         if (pd.notna(ligne["smc_sens"]) and ligne["smc_score"] >= self.reglages.score_min
                 and pd.notna(ligne["smc_stop"])):
-            return Signal(marche, ligne.name.to_pydatetime(), ligne["smc_sens"], "SMC", ligne["smc_stop"])
+            sens: Sens = ligne["smc_sens"]
+            distance = float(ligne["smc_stop"])
+            stop = float(ligne["close"]) + (-distance if sens == "achat" else distance)
+            return Signal(marche, ligne.name.to_pydatetime(), sens, "SMC", distance, stop)
         return None
 
     def sortir(self, ligne: pd.Series, sens: Sens) -> bool:

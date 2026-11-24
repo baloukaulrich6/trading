@@ -1,5 +1,6 @@
 """Adaptateur du terminal MT5, utilisable avec le module réel ou un double de test."""
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from hashlib import blake2s
 from math import isfinite
@@ -63,7 +64,11 @@ class CourtierMT5:
         if (resultat is None or not isfinite(resultat) or resultat >= 0
                 or marge is None or not isfinite(marge) or not 0 <= marge <= compte.margin_free):
             return None
-        risque = autoriser(self.etat_risque(), -resultat, self.expositions(ordre), self.limites)
+        if not isfinite(compte.equity) or compte.equity <= 0:
+            return None
+        etat = self.etat_risque()
+        risque = autoriser(replace(etat, capital=min(etat.capital, compte.equity)),
+                           -resultat, self.expositions(ordre), self.limites)
         if not risque.autorisee:
             return None
         remplissage = (mt5.ORDER_FILLING_FOK if info.filling_mode & 1 else

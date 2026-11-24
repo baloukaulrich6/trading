@@ -6,7 +6,10 @@ from datetime import datetime
 from math import isfinite
 from pathlib import Path
 
+import pandas as pd
+
 from nkap.backtest.moteur import Couts
+from nkap.backtest.smc_rapport import ecrire_html, evaluer_cinq_ans
 from nkap.backtest.walk_forward import verifier_reserve, walk_forward
 from nkap.configuration import charger_config
 from nkap.donnees.bougies import charger_csv
@@ -37,6 +40,8 @@ def main() -> int:
     parser.add_argument("--lot-min", type=float, required=True)
     parser.add_argument("--pas", type=float, required=True)
     parser.add_argument("--claude-par-signal", type=float, default=0.0, help="Hypothèse USD, sans appel API")
+    parser.add_argument("--smc", action="store_true", help="Évalue SMC sur cinq années")
+    parser.add_argument("--html", type=Path, help="Écrit le tableau du backtest SMC")
     parser.add_argument("--reserve", action="store_true", help="Évalue le champion configuré sur la réserve")
     args = parser.parse_args()
     try:
@@ -46,6 +51,16 @@ def main() -> int:
         data = charger_csv(args.csv, a_la_date=datetime.fromisoformat(args.a_la_date))
         couts = Couts(args.spread, args.glissement, args.commission, args.swap, args.valeur_unite_lot,
                      args.lot_min, args.pas, args.claude_par_signal)
+        if args.smc:
+            borne = pd.Timestamp(datetime.fromisoformat(args.a_la_date)).tz_convert("UTC")
+            rapport, simulation = evaluer_cinq_ans(args.marche, data, champion, limites, couts,
+                                                   args.capital, borne, ouvrir_reserve=args.reserve)
+            if args.html:
+                ecrire_html(args.html, rapport, simulation)
+            print(json.dumps(compatible_json(rapport), ensure_ascii=False, indent=2, allow_nan=False))
+            return 0
+        if args.html:
+            raise ValueError("--html est disponible avec --smc.")
         evaluation = walk_forward(args.marche, data, champion, limites, couts, args.capital)
         rapport = asdict(evaluation)
         rapport["admission_reel"] = False

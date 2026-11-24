@@ -23,6 +23,7 @@ class Signal:
     sens: Sens
     module: Module
     distance_stop: float
+    stop_structurel: float | None = None
 
 
 @dataclass(frozen=True)

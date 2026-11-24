@@ -14,7 +14,7 @@ def test_mt5_precontrole_risque_identifiant_et_stop(tmp_path):
     _, _, limites = charger_config(Path("config"))
     api = Mock()
     api.ACCOUNT_TRADE_MODE_DEMO, api.ACCOUNT_TRADE_MODE_REAL = 0, 2
-    api.account_info.return_value = NS(server="HFM-Demo", login=1, trade_mode=0, margin_free=500)
+    api.account_info.return_value = NS(server="HFM-Demo", login=1, trade_mode=0, margin_free=500, equity=1000)
     api.positions_get.return_value = ()
     api.orders_get.return_value = ()
     api.symbol_info.return_value = NS(digits=5, filling_mode=2)

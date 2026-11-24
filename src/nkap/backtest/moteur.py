@@ -9,6 +9,7 @@ from nkap.configuration import Limites, Parametres
 from nkap.domaine.modeles import Signal, Trade
 from nkap.strategies.contrarien import Contrarien
 from nkap.strategies.regime import preparer
+from nkap.strategies.smc import SMC
 from nkap.strategies.turtles import Turtles
 
 
@@ -53,10 +54,12 @@ class Simulation:
 
 def simuler(marche: str, donnees: pd.DataFrame, p: Parametres, limites: Limites,
             couts: Couts, depart: pd.Timestamp, fin: pd.Timestamp, capital_initial: float, *,
-            filtre_signal: Callable[[Signal, pd.Series], bool] | None = None) -> Simulation:
+            filtre_signal: Callable[[Signal, pd.Series], bool] | None = None,
+            smc: SMC | None = None) -> Simulation:
     if not isfinite(capital_initial) or capital_initial <= 0:
         raise ValueError("Le capital initial doit être positif.")
-    donnees = preparer(donnees.loc[donnees.index < fin], p)
+    donnees = donnees.loc[donnees.index < fin]
+    donnees = smc.preparer(donnees, p) if smc is not None else preparer(donnees, p)
     periode = donnees.loc[donnees.index >= depart]
     if periode.empty:
         raise ValueError("Aucune bougie dans la fenêtre de simulation.")
@@ -69,6 +72,8 @@ def simuler(marche: str, donnees: pd.DataFrame, p: Parametres, limites: Limites,
     position: Position | None = None
     signal: Signal | None = None
     strategies = {"TUR": Turtles(), "CTR": Contrarien()}
+    if smc is not None:
+        strategies["SMC"] = smc
     execution = (couts.spread + 2 * couts.glissement) * couts.valeur_unite_lot
 
     def resultat(pos: Position, prix: float) -> float:
@@ -94,10 +99,13 @@ def simuler(marche: str, donnees: pd.DataFrame, p: Parametres, limites: Limites,
                 position = None
         if position is None and signal is not None:
             distance = signal.distance_stop
-            risque_lot = distance * couts.valeur_unite_lot + execution + couts.commission
+            signe = 1 if signal.sens == "achat" else -1
+            stop = signal.stop_structurel if signal.stop_structurel is not None else ouverture - signe * distance
+            distance = signe * (ouverture - stop)
+            risque_lot = max(0, distance) * couts.valeur_unite_lot + execution + couts.commission
             taux = limites.risque_base / (2 if depuis_perte >= limites.reduire_apres else 1)
-            lots = floor(max(0, capital * taux) / risque_lot / couts.pas) * couts.pas
-            stop = ouverture - distance if signal.sens == "achat" else ouverture + distance
+            lots = (floor(max(0, capital * taux) / risque_lot / couts.pas) * couts.pas
+                    if distance > 0 and risque_lot > 0 else 0.0)
             if lots >= couts.lot_min and stop > 0:
                 position = Position(signal, date, ouverture, stop, lots, lots * risque_lot)
         signal = None
@@ -118,10 +126,10 @@ def simuler(marche: str, donnees: pd.DataFrame, p: Parametres, limites: Limites,
 
         valeur = capital + (resultat(position, cloture) if position is not None else 0)
         sommet = max(sommet, valeur)
-        if (position is None and date != periode.index[-1] and pd.notna(bougie["tendance"])
+        if (position is None and date != periode.index[-1] and (smc is not None or pd.notna(bougie["tendance"]))
                 and bougie["atr"] > 0 and capital >= sommet * (1 - limites.drawdown_max)
                 and depuis_perte < limites.pause_apres):
-            module = "TUR" if bougie["tendance"] else "CTR"
+            module = "SMC" if smc is not None else "TUR" if bougie["tendance"] else "CTR"
             signal = strategies[module].entree(marche, bougie, p)
             if signal is not None and filtre_signal is not None and not filtre_signal(signal, bougie):
                 signal = None
