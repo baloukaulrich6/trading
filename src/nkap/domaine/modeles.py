@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Literal
 
 Sens = Literal["achat", "vente"]
-Module = Literal["TUR", "CTR"]
+Module = Literal["TUR", "CTR", "SMC"]
 
 
 @dataclass(frozen=True)
