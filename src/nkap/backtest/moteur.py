@@ -55,6 +55,16 @@ class Entrees:
 
 
 @dataclass(frozen=True)
+class RefusEntree:
+    date_signal: str
+    date_ouverture: str
+    sens: str
+    budget_usd: float
+    perte_lot_min_usd: float
+    capital_min_usd: float
+
+
+@dataclass(frozen=True)
 class Simulation:
     trades: tuple[Trade, ...]
     capital_depart: float
@@ -62,6 +72,7 @@ class Simulation:
     claude_usd: float
     duree_jours: float
     entrees: Entrees = field(default_factory=Entrees)
+    refus_lot_minimal: tuple[RefusEntree, ...] = ()
 
 
 def simuler(marche: str, donnees: pd.DataFrame, p: Parametres, limites: Limites,
@@ -80,6 +91,7 @@ def simuler(marche: str, donnees: pd.DataFrame, p: Parametres, limites: Limites,
     depuis_perte = 0
     courbe = [capital]
     trades: list[Trade] = []
+    refus: list[RefusEntree] = []
     claude = 0.0
     position: Position | None = None
     signal: Signal | None = None
@@ -127,8 +139,11 @@ def simuler(marche: str, donnees: pd.DataFrame, p: Parametres, limites: Limites,
             else:
                 insuffisants += 1
                 lot_negociable = ceil(couts.lot_min / couts.pas - 1e-12) * couts.pas
-                minimum = lot_negociable * risque_lot / taux + couts.claude_par_signal
+                perte_min = lot_negociable * risque_lot
+                minimum = perte_min / taux + couts.claude_par_signal
                 capital_min = minimum if capital_min is None else min(capital_min, minimum)
+                refus.append(RefusEntree(signal.date.isoformat(), date.isoformat(), signal.sens,
+                                         max(0, capital * taux), perte_min, minimum))
         signal = None
         if position is not None:
             achat = position.signal.sens == "achat"
@@ -168,4 +183,4 @@ def simuler(marche: str, donnees: pd.DataFrame, p: Parametres, limites: Limites,
 
     return Simulation(tuple(trades), capital_initial, tuple(courbe), claude,
                       max(1.0, (fin - depart).total_seconds() / 86400),
-                      Entrees(signaux, occupes, bloques, filtres, stops, insuffisants, capital_min))
+                      Entrees(signaux, occupes, bloques, filtres, stops, insuffisants, capital_min), tuple(refus))

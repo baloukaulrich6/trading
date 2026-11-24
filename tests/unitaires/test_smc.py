@@ -46,3 +46,7 @@ def test_zero_trade_explique_par_lot_minimal():
     assert resultat.entrees.signaux > 0
     assert resultat.entrees.capital_insuffisant == resultat.entrees.signaux
     assert resultat.entrees.capital_min_usd > 5.01
+    assert len(resultat.refus_lot_minimal) == resultat.entrees.capital_insuffisant
+    refus = resultat.refus_lot_minimal[0]
+    assert refus.perte_lot_min_usd > refus.budget_usd
+    assert refus.date_signal < refus.date_ouverture

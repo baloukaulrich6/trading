@@ -38,6 +38,7 @@ def evaluer_cinq_ans(marche: str, data: pd.DataFrame, p: Parametres, limites: Li
                      if test.trades else None),
         "drawdown_mc_95": monte_carlo(test),
         "nombre_trades_suffisant": mesures.trades >= 100,
+        "refus_lot_minimal": [asdict(refus) for refus in test.refus_lot_minimal],
     }
     if ouvrir_reserve:
         dernier = simuler(marche, serie, p, limites, couts, reserve, fin, capital, smc=strategie)
@@ -50,7 +51,8 @@ def ecrire_html(destination: Path, rapport: dict, s: Simulation) -> None:
     sym = escape(rapport["marche"])
     wr = rapport["win_rate"]
     taux = f"{wr:.1%}" if wr is not None else "—"
-    pf = f"{mesures.facteur_profit:.2f}" if mesures.facteur_profit < float("inf") else "∞"
+    pf = ("—" if not s.trades else f"{mesures.facteur_profit:.2f}"
+          if mesures.facteur_profit < float("inf") else "∞")
     lignes = "".join(
         "<tr>" + "".join(f"<td>{escape(str(v))}</td>" for v in
                          (t.date_entree.date(), t.date_sortie.date(), t.signal.sens,
@@ -61,6 +63,16 @@ def ecrire_html(destination: Path, rapport: dict, s: Simulation) -> None:
     e = s.entrees
     minimum = (f"<p>Plus petit capital estimé parmi les entrées refusées pour taille : "
                f"<strong>{e.capital_min_usd:.2f} USD</strong>.</p>" if e.capital_min_usd is not None else "")
+    refus = "".join(
+        "<tr>" + "".join(f"<td>{escape(str(v))}</td>" for v in
+                         (r.date_signal[:10], r.date_ouverture[:10], r.sens, f"{r.budget_usd:.4f}",
+                          f"{r.perte_lot_min_usd:.4f}", f"{r.capital_min_usd:.2f}")) + "</tr>"
+        for r in s.refus_lot_minimal
+    )
+    tableau_refus = (f"""<section><h2>Signaux refusés au lot minimal</h2><table><thead>
+<tr><th>Clôture du signal</th><th>Ouverture simulée</th><th>Sens</th><th>Budget (USD)</th>
+<th>Perte au stop (USD)</th><th>Capital estimé (USD)</th></tr></thead><tbody>{refus}</tbody></table></section>"""
+                     if refus else "")
     destination.write_text(f"""<!doctype html>
 <html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Nkap · Backtest SMC</title><style>
@@ -76,6 +88,7 @@ th,td{{text-align:left;padding:9px;border-bottom:1px solid #2c3c48}}
 <section><h2>Analyse des entrées</h2><p>{e.signaux} signaux · {e.capital_insuffisant} refus pour lot minimal ·
 {e.stop_invalide} stops invalidés à l’ouverture · {e.position_existante} positions existantes ·
 {e.coupe_circuit} coupe-circuits · {e.filtres} refus par les filtres.</p>{minimum}</section>
+{tableau_refus}
 <section><h2>Courbe d’équité</h2><canvas id="equite" role="img" aria-label="Courbe de capital simulé"></canvas></section>
 <section><h2>Journal des trades simulés</h2><table><thead><tr><th>Entrée</th><th>Sortie</th><th>Sens</th>
 <th>Net (R)</th><th>Net (USD)</th><th>Motif</th></tr></thead>
