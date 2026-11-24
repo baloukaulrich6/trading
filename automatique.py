@@ -20,6 +20,7 @@ from objectif_hfm import Objectif, SuiviObjectif
 from pilotage_local import Pilotage
 import rapport
 import robot
+from revue_claude import RevueQuotidienne
 import tableau_de_bord
 from univers_marches import marches
 
@@ -59,6 +60,8 @@ class Planificateur:
         self.rapports = []
         self.observations = {}
         self.marches = {}
+        self.revue_claude = RevueQuotidienne(BASE / "automatique.sqlite3")
+        self.clotures_revue = []
         objectif = Objectif.configurer()
         self.suivi_objectif = SuiviObjectif(BASE / "automatique.sqlite3", objectif) if objectif else None
         self.demarrage_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
@@ -137,9 +140,17 @@ class Planificateur:
         fin = maintenant + timedelta(seconds=1)
         transactions = mt5.history_deals_get(debut, fin)
         net, nombre = rapport.bilan(transactions, C.MAGIC)
-        semaine, nombre_semaine = rapport.bilan(
-            mt5.history_deals_get(rapport.debut_semaine(maintenant), fin), C.MAGIC
-        )
+        transactions_semaine = mt5.history_deals_get(rapport.debut_semaine(maintenant), fin)
+        semaine, nombre_semaine = rapport.bilan(transactions_semaine, C.MAGIC)
+        sorties = tuple(getattr(mt5, f"DEAL_ENTRY_{nom}", None) for nom in ("OUT", "OUT_BY", "INOUT"))
+        clotures = [d for d in (transactions_semaine or ())
+                    if d.magic == C.MAGIC and getattr(d, "entry", -1) in sorties]
+        self.clotures_revue.extend({
+            "courtier": courtier.nom, "symbole": d.symbol,
+            "date_utc": datetime.fromtimestamp(d.time, timezone.utc).isoformat(),
+            "net": rapport.montant_transaction(d), "devise": compte.currency,
+            "compte_reel": courtier.est_compte_reel(),
+        } for d in clotures[-15:])
         positions = courtier.positions()
         releves = []
         for base in marches(courtier.nom):
@@ -221,9 +232,19 @@ class Planificateur:
         temporaire.write_text(json.dumps(etat, ensure_ascii=False), encoding="utf-8")
         temporaire.replace(ETAT)
         heure_entree, heure_limite = horaires()
+        evenements = activite()
+        self.revue_claude.demarrer(datetime.fromisoformat(etat["heure"]), {
+            "comptes": [{k: r[k] for k in ("courtier", "devise", "reel", "resultat",
+                                         "resultat_semaine", "transactions_semaine")} for r in self.rapports],
+            "clotures": self.clotures_revue[-20:],
+            "decisions": [{**e, "detail": (e["detail"] or "")[:300]} for e in evenements],
+            "note": "Le journal ancien peut contenir plusieurs modes ou comptes.",
+        })
         tableau_de_bord.INSTANTANE = json.dumps({
             "nom": os.getenv("NOM_MASCOTTE", "Nkap"),
-            "mode": C.MODE, "veto_claude": C.CLAUDE_ACTIF, "maj": etat["heure"],
+            "mode": C.MODE, "maj": etat["heure"],
+            "revue_claude_active": bool(C.CLAUDE_ACTIF and C.ANTHROPIC_API_KEY),
+            "revue_claude": self.revue_claude.derniere(),
             "message": statut, "humeur": "veille" if self.rapports else "erreur",
             "entrees_ouvertes": self.entrees_permises(),
             "risque_pct": C.RISQUE_PAR_TRADE * 100,
@@ -237,7 +258,7 @@ class Planificateur:
                                 "resultat_jour": r["resultat"], "trades_semaine": r["transactions_semaine"]}
                 for r in self.rapports
             },
-            "evenements": activite(),
+            "evenements": evenements,
             "marches": [m for r in self.rapports for m in r["marches"]],
             "fantome": self.observations_fantomes if self.fantome is not None and C.MODE == "TEST" else None,
         }, ensure_ascii=False)
@@ -276,6 +297,7 @@ def main():
             elif mode == "REEL" and pilotage.reel is not None:
                 actifs = [pilotage.reel]
         planificateur.rapports.clear()
+        planificateur.clotures_revue.clear()
         planificateur.observations_fantomes.clear()
         erreurs = []
         for conf in actifs:

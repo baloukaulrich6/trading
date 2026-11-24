@@ -217,6 +217,10 @@ canvas { display: block; width: 100%; height: 100%; }
       <header class="panneau-entete"><div><h2>Observation fantôme</h2><p>Comparaison des versions EBSW et ER</p></div></header>
       <div id="observations" class="positions"></div>
     </section>
+    <section class="panneau" id="revue-claude">
+      <header class="panneau-entete"><div><h2>Revue Claude</h2><p>Résultats passés et propositions à tester</p></div></header>
+      <div class="vide" id="contenu-revue"></div>
+    </section>
   </main>
   <script>
 "use strict";
@@ -500,7 +504,24 @@ function afficher(frais) {
   $("fenetre").textContent = frais && typeof etat.entrees_ouvertes === "boolean"
     ? "Entrées " + (etat.entrees_ouvertes ? "ouvertes" : "fermées") + " · " + etat.heure_entree + "–" + etat.heure_limite
     : "";
-  $("veto").textContent = frais ? "Claude : " + (etat.veto_claude ? "veto actif" : "veto désactivé") : "";
+  $("veto").textContent = frais ? "Claude : " + (etat.revue_claude_active ? "revue consultative" : "revue inactive") : "";
+  const revue = etat.revue_claude;
+  const blocRevue = $("contenu-revue");
+  const lignesRevue = [];
+  if (revue?.statut === "disponible") {
+    lignesRevue.push(noeud("p", revue.jour + " · " + revue.resume));
+    for (const [titre, elements] of [["Propositions", revue.propositions], ["Alertes", revue.alertes]]) {
+      if (!elements?.length) continue;
+      const liste = noeud("ul");
+      liste.append(...elements.map((texte) => noeud("li", texte)));
+      lignesRevue.push(noeud("h3", titre), liste);
+    }
+  } else {
+    lignesRevue.push(noeud("p", revue?.statut === "indisponible"
+      ? "Revue indisponible · " + revue.erreur : revue?.statut === "en cours"
+      ? "Revue en cours…" : "En attente d’une revue des résultats."));
+  }
+  blocRevue.replaceChildren(...lignesRevue);
   $("maj").textContent = etat.maj ? "Dernier relevé " + temps.format(new Date(etat.maj)) + " · Douala" : "";
   montrerMarches();
   montrerCompte();

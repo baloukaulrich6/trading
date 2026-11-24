@@ -1,6 +1,6 @@
 """Robot principal : à lancer une fois par jour, après la clôture des bougies journalières.
 
-MODE=TEST   : calcule les signaux et le veto, n'envoie aucun ordre.
+MODE=TEST   : calcule les signaux sans envoyer d'ordre.
 MODE=ORDRES : envoie les ordres sur le compte configuré (démo d'abord !).
 """
 import csv
@@ -15,7 +15,6 @@ import strategie as S
 from courtier import Courtier
 from univers_marches import marches
 from suivi_mt5 import publier
-from veto_claude import demander_veto
 
 log = logging.getLogger("robot")
 
@@ -102,25 +101,6 @@ def chercher_entree(c: Courtier, symbole: str, ligne, capital: float, envoyer: b
     if planificateur is not None and not planificateur.reserver(c, symbole, ligne.name):
         return False
 
-    donnees_veto = {
-        "heure_utc": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"),
-        "symbole": symbole, "sens": sens, "module": module, "raison_signal": signal["raison"],
-        "prix": base_journal["prix"], "stop": base_journal["stop"], "volume": volume,
-        "regime": ligne["regime"], "ebsw": round(float(ligne["ebsw"]), 3),
-        "rsi_2j": round(float(ligne["rsi"]), 1),
-    }
-    if envoyer and c.est_compte_reel() and not C.CLAUDE_ACTIF:
-        autorise, raison = False, "Claude doit être activé pour une entrée sur compte réel"
-    else:
-        if C.CLAUDE_ACTIF:
-            publier(c.login, symbole, f"Signal {sens} · Analyse Claude en cours")
-        autorise, raison = demander_veto(donnees_veto)
-    if not autorise:
-        publier(c.login, symbole, f"Claude bloque · {raison}")
-        log.info("%s %s : veto de Claude (%s)", c.nom, symbole, raison)
-        journaliser(**base_journal, volume=volume, action="veto", resultat="bloqué", raison=raison)
-        return False
-
     if envoyer and planificateur is not None:
         objectif = planificateur.objectif_compte(c, c.infos_compte())
         if objectif and objectif["bloque"]:
@@ -130,8 +110,7 @@ def chercher_entree(c: Courtier, symbole: str, ligne, capital: float, envoyer: b
             return False
 
     ok, detail = c.ouvrir(symbole, sens, volume, stop, module) if envoyer else (False, motif)
-    decision = f"Claude autorise : {raison}" if C.CLAUDE_ACTIF else raison
-    publier(c.login, symbole, f"Signal {sens} · {decision} · {detail}")
+    publier(c.login, symbole, f"Signal {sens} · {detail}")
     log.info("%s %s : entrée %s %s %.2f lot -> %s", c.nom, symbole, module, sens, volume, detail)
     journaliser(**base_journal, volume=volume, action="entrée",
                 resultat="ok" if ok else "non envoyé", raison=f"{signal['raison']} | {detail}")
