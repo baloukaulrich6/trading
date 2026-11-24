@@ -1,7 +1,7 @@
 """Simulation événementielle D1 en devise USD, sans accès au courtier."""
 from collections.abc import Callable
-from dataclasses import dataclass
-from math import floor, isfinite
+from dataclasses import dataclass, field
+from math import ceil, floor, isfinite
 
 import pandas as pd
 
@@ -44,12 +44,24 @@ class Position:
 
 
 @dataclass(frozen=True)
+class Entrees:
+    signaux: int = 0
+    position_existante: int = 0
+    coupe_circuit: int = 0
+    filtres: int = 0
+    stop_invalide: int = 0
+    capital_insuffisant: int = 0
+    capital_min_usd: float | None = None
+
+
+@dataclass(frozen=True)
 class Simulation:
     trades: tuple[Trade, ...]
     capital_depart: float
     courbe: tuple[float, ...]
     claude_usd: float
     duree_jours: float
+    entrees: Entrees = field(default_factory=Entrees)
 
 
 def simuler(marche: str, donnees: pd.DataFrame, p: Parametres, limites: Limites,
@@ -71,6 +83,8 @@ def simuler(marche: str, donnees: pd.DataFrame, p: Parametres, limites: Limites,
     claude = 0.0
     position: Position | None = None
     signal: Signal | None = None
+    signaux = occupes = bloques = filtres = stops = insuffisants = 0
+    capital_min = None
     strategies = {"TUR": Turtles(), "CTR": Contrarien()}
     if smc is not None:
         strategies["SMC"] = smc
@@ -108,6 +122,13 @@ def simuler(marche: str, donnees: pd.DataFrame, p: Parametres, limites: Limites,
                     if distance > 0 and risque_lot > 0 else 0.0)
             if lots >= couts.lot_min and stop > 0:
                 position = Position(signal, date, ouverture, stop, lots, lots * risque_lot)
+            elif distance <= 0 or stop <= 0:
+                stops += 1
+            else:
+                insuffisants += 1
+                lot_negociable = ceil(couts.lot_min / couts.pas - 1e-12) * couts.pas
+                minimum = lot_negociable * risque_lot / taux + couts.claude_par_signal
+                capital_min = minimum if capital_min is None else min(capital_min, minimum)
         signal = None
         if position is not None:
             achat = position.signal.sens == "achat"
@@ -126,18 +147,25 @@ def simuler(marche: str, donnees: pd.DataFrame, p: Parametres, limites: Limites,
 
         valeur = capital + (resultat(position, cloture) if position is not None else 0)
         sommet = max(sommet, valeur)
-        if (position is None and date != periode.index[-1] and (smc is not None or pd.notna(bougie["tendance"]))
-                and bougie["atr"] > 0 and capital >= sommet * (1 - limites.drawdown_max)
-                and depuis_perte < limites.pause_apres):
+        if (date != periode.index[-1] and (smc is not None or pd.notna(bougie["tendance"]))
+                and bougie["atr"] > 0):
             module = "SMC" if smc is not None else "TUR" if bougie["tendance"] else "CTR"
-            signal = strategies[module].entree(marche, bougie, p)
-            if signal is not None and filtre_signal is not None and not filtre_signal(signal, bougie):
-                signal = None
-            if signal is not None:
-                capital -= couts.claude_par_signal
-                claude += couts.claude_par_signal
-                valeur = capital
+            candidat = strategies[module].entree(marche, bougie, p)
+            if candidat is not None:
+                signaux += 1
+                if position is not None:
+                    occupes += 1
+                elif capital < sommet * (1 - limites.drawdown_max) or depuis_perte >= limites.pause_apres:
+                    bloques += 1
+                elif filtre_signal is not None and not filtre_signal(candidat, bougie):
+                    filtres += 1
+                else:
+                    signal = candidat
+                    capital -= couts.claude_par_signal
+                    claude += couts.claude_par_signal
+                    valeur = capital
         courbe.append(valeur)
 
     return Simulation(tuple(trades), capital_initial, tuple(courbe), claude,
-                      max(1.0, (fin - depart).total_seconds() / 86400))
+                      max(1.0, (fin - depart).total_seconds() / 86400),
+                      Entrees(signaux, occupes, bloques, filtres, stops, insuffisants, capital_min))

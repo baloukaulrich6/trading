@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from nkap.backtest.moteur import Couts, simuler
 from nkap.configuration import charger_config
 from nkap.strategies.smc import SMC, ReglagesSMC
 
@@ -33,3 +34,15 @@ def test_structure_et_score_sans_anticipation():
     assert baisse["smc_evenement"] == "CHoCH"
     assert s.sortir(baisse, "achat")
     assert complet["smc_evenement"].notna().sum() == 2
+
+
+def test_zero_trade_explique_par_lot_minimal():
+    _, p, limites = charger_config(Path("config"))
+    d = donnees()
+    smc = SMC(ReglagesSMC(pivot=1))
+    resultat = simuler("EURUSD", d, p, limites, Couts(0, 0, 0, 0, 1, .1, .1),
+                       d.index[0], d.index[-1] + pd.Timedelta(days=1), 5.01, smc=smc)
+    assert not resultat.trades
+    assert resultat.entrees.signaux > 0
+    assert resultat.entrees.capital_insuffisant == resultat.entrees.signaux
+    assert resultat.entrees.capital_min_usd > 5.01

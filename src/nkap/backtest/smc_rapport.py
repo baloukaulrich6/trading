@@ -29,9 +29,9 @@ def evaluer_cinq_ans(marche: str, data: pd.DataFrame, p: Parametres, limites: Li
     rapport = {
         "marche": marche, "strategie": "SMC", "admission_reel": False,
         "formation": {"debut": debut.isoformat(), "fin_exclue": hors_echantillon.isoformat(),
-                      "mesures": asdict(mesurer(reglage))},
+                      "mesures": asdict(mesurer(reglage)), "entrees": asdict(reglage.entrees)},
         "hors_echantillon": {"debut": hors_echantillon.isoformat(), "fin_exclue": reserve.isoformat(),
-                             "mesures": asdict(mesures)},
+                             "mesures": asdict(mesures), "entrees": asdict(test.entrees)},
         "reserve_debut": reserve.isoformat(),
         "reserve_fin_exclue": fin.isoformat(),
         "win_rate": (sum(t.resultat_usd > 0 for t in test.trades) / len(test.trades)
@@ -58,6 +58,9 @@ def ecrire_html(destination: Path, rapport: dict, s: Simulation) -> None:
         for t in s.trades
     )
     courbe = json.dumps(s.courbe, allow_nan=False)
+    e = s.entrees
+    minimum = (f"<p>Plus petit capital estimé parmi les entrées refusées pour taille : "
+               f"<strong>{e.capital_min_usd:.2f} USD</strong>.</p>" if e.capital_min_usd is not None else "")
     destination.write_text(f"""<!doctype html>
 <html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Nkap · Backtest SMC</title><style>
@@ -70,6 +73,9 @@ th,td{{text-align:left;padding:9px;border-bottom:1px solid #2c3c48}}
 <section class="stats"><span>Résultat net <strong>{mesures.profit_usd:+.2f}</strong></span>
 <span>Win rate <strong>{taux}</strong></span><span>Profit factor <strong>{pf}</strong></span>
 <span>Drawdown <strong>{mesures.drawdown:.1%}</strong></span><span>Trades <strong>{mesures.trades}</strong></span></section>
+<section><h2>Analyse des entrées</h2><p>{e.signaux} signaux · {e.capital_insuffisant} refus pour lot minimal ·
+{e.stop_invalide} stops invalidés à l’ouverture · {e.position_existante} positions existantes ·
+{e.coupe_circuit} coupe-circuits · {e.filtres} refus par les filtres.</p>{minimum}</section>
 <section><h2>Courbe d’équité</h2><canvas id="equite" role="img" aria-label="Courbe de capital simulé"></canvas></section>
 <section><h2>Journal des trades simulés</h2><table><thead><tr><th>Entrée</th><th>Sortie</th><th>Sens</th>
 <th>Net (R)</th><th>Net (USD)</th><th>Motif</th></tr></thead>
